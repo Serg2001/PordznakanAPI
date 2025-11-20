@@ -23,7 +23,7 @@ namespace PordznakanAPI.Controllers
             try
             {
                 using var client = new HttpClient();
-                string url = $"https://api.emis.am/V1/getAllData/{regionId}";
+                string url = $"https://crmapi.dshh.am/api/Integration/SendRequest?myUrl=V1/getAllData/{regionId}";
                 var responseText = await client.GetStringAsync(url);
                 var json = JObject.Parse(responseText);
 
@@ -34,27 +34,50 @@ namespace PordznakanAPI.Controllers
                 foreach (JProperty schoolProp in json.Properties())
                 {
                     var school = schoolProp.Value;
-                    int ktakSchoolId = (int)school["schools_id"];
+
+                    // Skip if not a JObject
+                    if (school.Type != JTokenType.Object)
+                        continue;
+
+                    var schoolObj = school as JObject;
+                    if (schoolObj == null)
+                        continue;
+
+                    // Safely get schools_id
+                    var schoolsIdToken = schoolObj["schools_id"];
+                    if (schoolsIdToken == null || schoolsIdToken.Type == JTokenType.Null)
+                        continue;
+
+                    int ktakSchoolId = (int)schoolsIdToken;
                     schoolKtakIds.Add(ktakSchoolId);
 
-                    var classroomsToken = school["classrooms"] as JObject;
-                    if (classroomsToken != null)
+                    // Safely get classrooms
+                    var classroomsToken = schoolObj["classrooms"];
+                    if (classroomsToken != null && classroomsToken.Type == JTokenType.Object)
                     {
-                        foreach (JProperty classProp in classroomsToken.Properties())
+                        var classroomsObj = classroomsToken as JObject;
+                        if (classroomsObj != null)
                         {
-                            var cl = classProp.Value;
-
-                            classroomsToAdd.Add(new Classroom
+                            foreach (JProperty classProp in classroomsObj.Properties())
                             {
-                                KtakId = cl["id"]?.ToString() ?? Guid.NewGuid().ToString(),
-                                Grade = cl["grade"]?.ToString() ?? "",
-                                Classifier = cl["classifier"]?.ToString() ?? "",
-                                ClassName = cl["class"]?.ToString() ?? "",
-                                Stream = cl["stream"]?.ToString(),
-                                SchoolId = ktakSchoolId, // temporary: will be replaced
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow
-                            });
+                                var cl = classProp.Value;
+
+                                // Skip if not a JObject
+                                if (cl.Type != JTokenType.Object)
+                                    continue;
+
+                                classroomsToAdd.Add(new Classroom
+                                {
+                                    KtakId = cl["id"]?.ToString() ?? Guid.NewGuid().ToString(),
+                                    Grade = cl["grade"]?.ToString() ?? "",
+                                    Classifier = cl["classifier"]?.ToString() ?? "",
+                                    ClassName = cl["class"]?.ToString() ?? "",
+                                    Stream = cl["stream"]?.ToString(),
+                                    SchoolId = ktakSchoolId, // temporary: will be replaced
+                                    CreatedAt = DateTime.UtcNow,
+                                    UpdatedAt = DateTime.UtcNow
+                                });
+                            }
                         }
                     }
                 }
@@ -85,7 +108,6 @@ namespace PordznakanAPI.Controllers
                                 Name = school["name"]?.ToString() ?? $"School {ktakId}",
                                 CreatedAt = DateTime.UtcNow,
                                 UpdatedAt = DateTime.UtcNow
-                                // Do NOT set EmployeeId or any navigation prop here → avoids "EmployeeId" error
                             });
                         }
                     }
@@ -111,19 +133,76 @@ namespace PordznakanAPI.Controllers
                     classroom.SchoolId = localId;
                 }
 
-                // === Step 3: Insert only new classrooms (by KtakId) ===
-                //var existingKtakIds = await _context.Classrooms
-                //    .Where(c => classroomsToAdd.Select(x => x.KtakId).Contains(KtakId))
-                //    .Select(c => c.KtakId)
-                //    .ToHashSetAsync();
+                // === Step 3: Get existing classrooms and compare ===
+                var ktakIdsToCheck = classroomsToAdd.Select(x => x.KtakId).ToList();
+                var existingClassrooms = await _context.Classrooms
+                    .Where(c => ktakIdsToCheck.Contains(c.KtakId))
+                    .ToListAsync();
 
+                var existingKtakIdsSet = existingClassrooms.Select(c => c.KtakId).ToHashSet();
+
+                // Separate into new and potentially updated classrooms
                 var newClassrooms = classroomsToAdd
-                    .Where(c => !string.IsNullOrWhiteSpace(c.KtakId))
+                    .Where(c => !string.IsNullOrWhiteSpace(c.KtakId) && !existingKtakIdsSet.Contains(c.KtakId))
                     .ToList();
 
+                var classroomsToUpdate = classroomsToAdd
+                    .Where(c => !string.IsNullOrWhiteSpace(c.KtakId) && existingKtakIdsSet.Contains(c.KtakId))
+                    .ToList();
+
+                // === Step 4: Update existing classrooms if changed ===
+                int updatedCount = 0;
+                foreach (var updatedClassroom in classroomsToUpdate)
+                {
+                    var existingClassroom = existingClassrooms.First(c => c.KtakId == updatedClassroom.KtakId);
+
+                    bool hasChanges = false;
+
+                    if (existingClassroom.Grade != updatedClassroom.Grade)
+                    {
+                        existingClassroom.Grade = updatedClassroom.Grade;
+                        hasChanges = true;
+                    }
+
+                    if (existingClassroom.Classifier != updatedClassroom.Classifier)
+                    {
+                        existingClassroom.Classifier = updatedClassroom.Classifier;
+                        hasChanges = true;
+                    }
+
+                    if (existingClassroom.ClassName != updatedClassroom.ClassName)
+                    {
+                        existingClassroom.ClassName = updatedClassroom.ClassName;
+                        hasChanges = true;
+                    }
+
+                    if (existingClassroom.Stream != updatedClassroom.Stream)
+                    {
+                        existingClassroom.Stream = updatedClassroom.Stream;
+                        hasChanges = true;
+                    }
+
+                    if (existingClassroom.SchoolId != updatedClassroom.SchoolId)
+                    {
+                        existingClassroom.SchoolId = updatedClassroom.SchoolId;
+                        hasChanges = true;
+                    }
+
+                    if (hasChanges)
+                    {
+                        existingClassroom.UpdatedAt = DateTime.UtcNow;
+                        updatedCount++;
+                    }
+                }
+
+                // === Step 5: Save all changes ===
                 if (newClassrooms.Any())
                 {
                     _context.Classrooms.AddRange(newClassrooms);
+                }
+
+                if (updatedCount > 0 || newClassrooms.Any())
+                {
                     await _context.SaveChangesAsync();
                 }
 
@@ -134,7 +213,8 @@ namespace PordznakanAPI.Controllers
                     schoolsProcessed = schoolKtakIds.Count,
                     schoolsAdded = missingKtakIds.Count,
                     classroomsProcessed = classroomsToAdd.Count,
-                    classroomsAdded = newClassrooms.Count
+                    classroomsAdded = newClassrooms.Count,
+                    classroomsUpdated = updatedCount
                 });
             }
             catch (Exception ex)
