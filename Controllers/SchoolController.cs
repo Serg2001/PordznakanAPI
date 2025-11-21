@@ -8,11 +8,11 @@ namespace PordznakanAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class SchoolController : ControllerBase
+    public class PupilController : ControllerBase
     {
         private readonly AppDbContext _context;
 
-        public SchoolController(AppDbContext context)
+        public PupilController(AppDbContext context)
         {
             _context = context;
         }
@@ -27,10 +27,10 @@ namespace PordznakanAPI.Controllers
                 var responseText = await client.GetStringAsync(url);
                 var json = JObject.Parse(responseText);
 
-                var classroomsToAdd = new List<Classroom>();
-                var schoolKtakIds = new HashSet<int>();
+                var pupilsToAdd = new List<Pupil>();
+                var pupilKtakIds = new HashSet<string>();
 
-                // === Pass 1: Collect all KtakSchoolIds and classrooms ===
+                // === Pass 1: Collect all pupils from all schools and classrooms ===
                 foreach (JProperty schoolProp in json.Properties())
                 {
                     var school = schoolProp.Value;
@@ -48,8 +48,7 @@ namespace PordznakanAPI.Controllers
                     if (schoolsIdToken == null || schoolsIdToken.Type == JTokenType.Null)
                         continue;
 
-                    int ktakSchoolId = (int)schoolsIdToken;
-                    schoolKtakIds.Add(ktakSchoolId);
+                    string ktakSchoolId = schoolsIdToken.ToString();
 
                     // Safely get classrooms
                     var classroomsToken = schoolObj["classrooms"];
@@ -66,162 +65,228 @@ namespace PordznakanAPI.Controllers
                                 if (cl.Type != JTokenType.Object)
                                     continue;
 
-                                classroomsToAdd.Add(new Classroom
+                                var classObj = cl as JObject;
+                                if (classObj == null)
+                                    continue;
+
+                                string classroomId = cl["id"]?.ToString() ?? "";
+                                string grade = cl["grade"]?.ToString() ?? "";
+                                string classifier = cl["classifier"]?.ToString() ?? "";
+                                string className = cl["class"]?.ToString() ?? "";
+                                string stream = cl["stream"]?.ToString() ?? "";
+
+                                // Get students from this classroom
+                                var studentsToken = classObj["students"];
+                                if (studentsToken != null && studentsToken.Type == JTokenType.Object)
                                 {
-                                    KtakId = cl["id"]?.ToString() ?? Guid.NewGuid().ToString(),
-                                    Grade = cl["grade"]?.ToString() ?? "",
-                                    Classifier = cl["classifier"]?.ToString() ?? "",
-                                    ClassName = cl["class"]?.ToString() ?? "",
-                                    Stream = cl["stream"]?.ToString(),
-                                    SchoolId = ktakSchoolId, // temporary: will be replaced
-                                    CreatedAt = DateTime.UtcNow,
-                                    UpdatedAt = DateTime.UtcNow
-                                });
+                                    var studentsObj = studentsToken as JObject;
+                                    if (studentsObj != null)
+                                    {
+                                        foreach (JProperty studentsProp in studentsObj.Properties())
+                                        {
+                                            var studentsList = studentsProp.Value;
+
+                                            // Students can be an array
+                                            if (studentsList.Type == JTokenType.Array)
+                                            {
+                                                var studentsArray = studentsList as JArray;
+                                                if (studentsArray != null)
+                                                {
+                                                    foreach (var student in studentsArray)
+                                                    {
+                                                        if (student.Type != JTokenType.Object)
+                                                            continue;
+
+                                                        var pupilId = student["id"]?.ToString();
+                                                        if (string.IsNullOrWhiteSpace(pupilId))
+                                                            continue;
+
+                                                        pupilKtakIds.Add(pupilId);
+
+                                                        // Parse date of birth
+                                                        DateTime? dateOfBirth = null;
+                                                        var dobString = student["date_of_birth"]?.ToString();
+                                                        if (!string.IsNullOrWhiteSpace(dobString))
+                                                        {
+                                                            if (DateTime.TryParse(dobString, out DateTime parsedDate))
+                                                            {
+                                                                dateOfBirth = parsedDate;
+                                                            }
+                                                        }
+
+                                                        pupilsToAdd.Add(new Pupil
+                                                        {
+                                                            Id = Guid.NewGuid(),
+                                                            KtakSchoolId = ktakSchoolId,
+                                                            ClassroomId = classroomId,
+                                                            Grade = grade,
+                                                            Classifier = classifier,
+                                                            Class = className,
+                                                            Stream = stream,
+                                                            FirstName = student["first_name"]?.ToString() ?? "",
+                                                            LastName = student["last_name"]?.ToString() ?? "",
+                                                            FatherName = student["father_name"]?.ToString() ?? "",
+                                                            IdentDocument = student["ident_document"]?.ToString() ?? "",
+                                                            IdentDocumentNumber = student["ident_document_number"]?.ToString() ?? "",
+                                                            FromCountry = student["from_country"]?.ToString() ?? "",
+                                                            SocNumber = student["soc_number"]?.ToString() ?? "",
+                                                            DateOfBirth = dateOfBirth,
+                                                            Sex = student["sex"]?.ToString() ?? "",
+                                                            Status = student["status"]?.ToString() ?? "",
+                                                            CreatedAt = DateTime.UtcNow,
+                                                            UpdatedAt = DateTime.UtcNow
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // === Step 1: Ensure all schools exist (only query KtakId and Id) ===
-                var schoolMap = await _context.Schools
-                    .AsNoTracking()
-                    .Where(s => schoolKtakIds.Contains(s.KtakId))
-                    .Select(s => new { s.KtakId, s.Id })
-                    .ToDictionaryAsync(x => x.KtakId, x => x.Id);
-
-                var missingKtakIds = schoolKtakIds.Except(schoolMap.Keys).ToList();
-
-                if (missingKtakIds.Any())
-                {
-                    var schoolsToAdd = new List<School>();
-
-                    foreach (JProperty schoolProp in json.Properties())
-                    {
-                        var school = schoolProp.Value;
-                        int ktakId = (int)school["schools_id"];
-
-                        if (missingKtakIds.Contains(ktakId))
-                        {
-                            schoolsToAdd.Add(new School
-                            {
-                                KtakId = ktakId,
-                                Name = school["name"]?.ToString() ?? $"School {ktakId}",
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow
-                            });
-                        }
-                    }
-
-                    _context.Schools.AddRange(schoolsToAdd);
-                    await _context.SaveChangesAsync();
-
-                    // Add newly inserted schools to map
-                    foreach (var school in schoolsToAdd)
-                    {
-                        schoolMap[school.KtakId] = school.Id;
-                    }
-                }
-
-                // === Step 2: Fix SchoolId in classrooms (KtakId → Local DB Id) ===
-                foreach (var classroom in classroomsToAdd)
-                {
-                    if (!schoolMap.TryGetValue(classroom.SchoolId, out int localId))
-                    {
-                        // Fallback (should not happen)
-                        localId = schoolMap.Values.First();
-                    }
-                    classroom.SchoolId = localId;
-                }
-
-                // === Step 3: Get existing classrooms and compare ===
-                var ktakIdsToCheck = classroomsToAdd.Select(x => x.KtakId).ToList();
-                var existingClassrooms = await _context.Classrooms
-                    .Where(c => ktakIdsToCheck.Contains(c.KtakId))
+                // === Step 2: Get existing pupils and compare ===
+                var existingPupils = await _context.Pupils
+                    .Where(p => pupilKtakIds.Contains(p.KtakSchoolId + "-" + p.ClassroomId + "-" + p.IdentDocumentNumber))
                     .ToListAsync();
 
-                var existingKtakIdsSet = existingClassrooms.Select(c => c.KtakId).ToHashSet();
+                // Create a composite key for comparison (since we don't have a single KtakId for pupils)
+                var existingPupilsSet = existingPupils
+                    .Select(p => $"{p.KtakSchoolId}-{p.ClassroomId}-{p.IdentDocumentNumber}")
+                    .ToHashSet();
 
-                // Separate into new and potentially updated classrooms
-                var newClassrooms = classroomsToAdd
-                    .Where(c => !string.IsNullOrWhiteSpace(c.KtakId) && !existingKtakIdsSet.Contains(c.KtakId))
+                // Separate into new and potentially updated pupils
+                var newPupils = pupilsToAdd
+                    .Where(p => !existingPupilsSet.Contains($"{p.KtakSchoolId}-{p.ClassroomId}-{p.IdentDocumentNumber}"))
                     .ToList();
 
-                var classroomsToUpdate = classroomsToAdd
-                    .Where(c => !string.IsNullOrWhiteSpace(c.KtakId) && existingKtakIdsSet.Contains(c.KtakId))
+                var pupilsToUpdate = pupilsToAdd
+                    .Where(p => existingPupilsSet.Contains($"{p.KtakSchoolId}-{p.ClassroomId}-{p.IdentDocumentNumber}"))
                     .ToList();
 
-                // === Step 4: Update existing classrooms if changed ===
+                // === Step 3: Update existing pupils if changed ===
                 int updatedCount = 0;
-                foreach (var updatedClassroom in classroomsToUpdate)
+                foreach (var updatedPupil in pupilsToUpdate)
                 {
-                    var existingClassroom = existingClassrooms.First(c => c.KtakId == updatedClassroom.KtakId);
+                    var existingPupil = existingPupils.First(p =>
+                        p.KtakSchoolId == updatedPupil.KtakSchoolId &&
+                        p.ClassroomId == updatedPupil.ClassroomId &&
+                        p.IdentDocumentNumber == updatedPupil.IdentDocumentNumber);
 
                     bool hasChanges = false;
 
-                    if (existingClassroom.Grade != updatedClassroom.Grade)
+                    if (existingPupil.Grade != updatedPupil.Grade)
                     {
-                        existingClassroom.Grade = updatedClassroom.Grade;
+                        existingPupil.Grade = updatedPupil.Grade;
                         hasChanges = true;
                     }
 
-                    if (existingClassroom.Classifier != updatedClassroom.Classifier)
+                    if (existingPupil.Classifier != updatedPupil.Classifier)
                     {
-                        existingClassroom.Classifier = updatedClassroom.Classifier;
+                        existingPupil.Classifier = updatedPupil.Classifier;
                         hasChanges = true;
                     }
 
-                    if (existingClassroom.ClassName != updatedClassroom.ClassName)
+                    if (existingPupil.Class != updatedPupil.Class)
                     {
-                        existingClassroom.ClassName = updatedClassroom.ClassName;
+                        existingPupil.Class = updatedPupil.Class;
                         hasChanges = true;
                     }
 
-                    if (existingClassroom.Stream != updatedClassroom.Stream)
+                    if (existingPupil.Stream != updatedPupil.Stream)
                     {
-                        existingClassroom.Stream = updatedClassroom.Stream;
+                        existingPupil.Stream = updatedPupil.Stream;
                         hasChanges = true;
                     }
 
-                    if (existingClassroom.SchoolId != updatedClassroom.SchoolId)
+                    if (existingPupil.FirstName != updatedPupil.FirstName)
                     {
-                        existingClassroom.SchoolId = updatedClassroom.SchoolId;
+                        existingPupil.FirstName = updatedPupil.FirstName;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.LastName != updatedPupil.LastName)
+                    {
+                        existingPupil.LastName = updatedPupil.LastName;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.FatherName != updatedPupil.FatherName)
+                    {
+                        existingPupil.FatherName = updatedPupil.FatherName;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.IdentDocument != updatedPupil.IdentDocument)
+                    {
+                        existingPupil.IdentDocument = updatedPupil.IdentDocument;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.FromCountry != updatedPupil.FromCountry)
+                    {
+                        existingPupil.FromCountry = updatedPupil.FromCountry;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.SocNumber != updatedPupil.SocNumber)
+                    {
+                        existingPupil.SocNumber = updatedPupil.SocNumber;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.DateOfBirth != updatedPupil.DateOfBirth)
+                    {
+                        existingPupil.DateOfBirth = updatedPupil.DateOfBirth;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.Sex != updatedPupil.Sex)
+                    {
+                        existingPupil.Sex = updatedPupil.Sex;
+                        hasChanges = true;
+                    }
+
+                    if (existingPupil.Status != updatedPupil.Status)
+                    {
+                        existingPupil.Status = updatedPupil.Status;
                         hasChanges = true;
                     }
 
                     if (hasChanges)
                     {
-                        existingClassroom.UpdatedAt = DateTime.UtcNow;
+                        existingPupil.UpdatedAt = DateTime.UtcNow;
                         updatedCount++;
                     }
                 }
 
-                // === Step 5: Save all changes ===
-                if (newClassrooms.Any())
+                // === Step 4: Save all changes ===
+                if (newPupils.Any())
                 {
-                    _context.Classrooms.AddRange(newClassrooms);
+                    _context.Pupils.AddRange(newPupils);
                 }
 
-                if (updatedCount > 0 || newClassrooms.Any())
+                if (updatedCount > 0 || newPupils.Any())
                 {
                     await _context.SaveChangesAsync();
                 }
 
                 return Ok(new
                 {
-                    message = "Sync completed successfully!",
+                    message = "Pupil sync completed successfully!",
                     regionId,
-                    schoolsProcessed = schoolKtakIds.Count,
-                    schoolsAdded = missingKtakIds.Count,
-                    classroomsProcessed = classroomsToAdd.Count,
-                    classroomsAdded = newClassrooms.Count,
-                    classroomsUpdated = updatedCount
+                    pupilsProcessed = pupilsToAdd.Count,
+                    pupilsAdded = newPupils.Count,
+                    pupilsUpdated = updatedCount
                 });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new
                 {
-                    error = "Sync failed",
+                    error = "Pupil sync failed",
                     message = ex.Message,
                     innerException = ex.InnerException?.Message,
                     stackTrace = ex.StackTrace
