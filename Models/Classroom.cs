@@ -2,9 +2,11 @@
 {
     public class Classroom
     {
-        public int Id { get; set; }
+        public Guid Id { get; set; }
 
-        public string KtakId { get; set; } = string.Empty;
+        public string KtakSchoolId { get; set; } = string.Empty;
+
+        public string KtakClassroomId { get; set; } = string.Empty;
 
         public string Grade { get; set; } = string.Empty;
 
@@ -14,13 +16,13 @@
 
         public string? Stream { get; set; } = string.Empty;
 
-        public int SchoolId { get; set; }
+        public Guid SchoolId { get; set; }  // Foreign key to School.DshhSchoolId
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
-        ////Navigation Properties
-        //public School School { get; set; }
-        //public ICollection<Pupil> Pupils { get; set; }
+        // Navigation Properties
+        public School School { get; set; } = null!;
+        public ICollection<Pupil> Pupils { get; set; } = new List<Pupil>();
     }
 }
