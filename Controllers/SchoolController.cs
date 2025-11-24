@@ -1,25 +1,283 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PordznakanAPI.Data;
+using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
 
 namespace PordznakanAPI.Controllers
 {
+    // Result class for sync operations
+    public class SyncResult
+    {
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
+        public int RegionId { get; set; }
+        public int SchoolsProcessed { get; set; }
+        public int SchoolsAdded { get; set; }
+        public int SchoolsUpdated { get; set; }
+        public int ClassroomsProcessed { get; set; }
+        public int ClassroomsAdded { get; set; }
+        public int ClassroomsUpdated { get; set; }
+        public int PupilsProcessed { get; set; }
+        public int PupilsAdded { get; set; }
+        public int PupilsUpdated { get; set; }
+        
+        // Lists of changed entities using DTOs
+        public List<SchoolDto> SchoolsAddedList { get; set; } = new();
+        public List<SchoolDto> SchoolsUpdatedList { get; set; } = new();
+        public List<ClassroomDto> ClassroomsAddedList { get; set; } = new();
+        public List<ClassroomDto> ClassroomsUpdatedList { get; set; } = new();
+        public List<PupilDto> PupilsAddedList { get; set; } = new();
+        public List<PupilDto> PupilsUpdatedList { get; set; } = new();
+    }
+
+    // Class to hold all changed entities for external API
+    public class ChangedEntitiesDto
+    {
+        public List<SchoolDto> SchoolsAdded { get; set; } = new();
+        public List<SchoolDto> SchoolsUpdated { get; set; } = new();
+        public List<ClassroomDto> ClassroomsAdded { get; set; } = new();
+        public List<ClassroomDto> ClassroomsUpdated { get; set; } = new();
+        public List<PupilDto> PupilsAdded { get; set; } = new();
+        public List<PupilDto> PupilsUpdated { get; set; } = new();
+    }
+
     [Route("api/[controller]")]
     [ApiController]
     public class PupilController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<PupilController>? _logger;
 
-        public PupilController(AppDbContext context)
+        public PupilController(AppDbContext context, ILogger<PupilController>? logger = null)
         {
             _context = context;
+            _logger = logger;
         }
 
-        [HttpPost("sync/{regionId?}")]
-        public async Task<IActionResult> Sync([FromRoute] int regionId = 1)
+        // Helper methods to map Models to DTOs
+        private SchoolDto MapToSchoolDto(School school)
         {
+            return new SchoolDto
+            {
+                DshhSchoolId = school.DshhSchoolId,
+                KtakSchoolId = school.KtakSchoolId,
+                RegionId = school.RegionId,
+                Name = school.Name,
+                Marz = school.Marz,
+                Region = school.Region,
+                Community = school.Community,
+                CreatedAt = school.CreatedAt,
+                UpdatedAt = school.UpdatedAt
+            };
+        }
+
+        private ClassroomDto MapToClassroomDto(Classroom classroom)
+        {
+            return new ClassroomDto
+            {
+                Id = classroom.Id,
+                KtakSchoolId = classroom.KtakSchoolId,
+                KtakClassroomId = classroom.KtakClassroomId,
+                Grade = classroom.Grade,
+                Classifier = classroom.Classifier,
+                ClassName = classroom.ClassName,
+                Stream = classroom.Stream,
+                SchoolId = classroom.SchoolId,
+                CreatedAt = classroom.CreatedAt,
+                UpdatedAt = classroom.UpdatedAt
+            };
+        }
+
+        private PupilDto MapToPupilDto(Pupil pupil)
+        {
+            return new PupilDto
+            {
+                Id = pupil.Id,
+                KtakPupilId = pupil.KtakPupilId,
+                KtakSchoolId = pupil.KtakSchoolId,
+                ClassroomId = pupil.ClassroomId,
+                ClassroomInternalId = pupil.ClassroomInternalId,
+                FirstName = pupil.FirstName,
+                LastName = pupil.LastName,
+                FatherName = pupil.FatherName,
+                IdentDocument = pupil.IdentDocument,
+                IdentDocumentNumber = pupil.IdentDocumentNumber,
+                FromCountry = pupil.FromCountry,
+                SocNumber = pupil.SocNumber,
+                DateOfBirth = pupil.DateOfBirth,
+                Sex = pupil.Sex,
+                Status = pupil.Status,
+                CreatedAt = pupil.CreatedAt,
+                UpdatedAt = pupil.UpdatedAt
+            };
+        }
+
+        /// <summary>
+        /// Syncs all 10 regions. This method is designed to be called by Hangfire.
+        /// </summary>
+        public async Task SyncAllRegions()
+        {
+            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+            var results = new List<SyncResult>();
+            var syncStartTime = DateTime.UtcNow;
+
+            _logger?.LogInformation($"Starting sync for all {regionIds.Length} regions at {syncStartTime}");
+
+            foreach (var regionId in regionIds)
+            {
+                try
+                {
+                    _logger?.LogInformation($"Syncing region {regionId}...");
+                    var result = await SyncRegionInternal(regionId);
+                    results.Add(result);
+                    
+                    if (result.Success)
+                    {
+                        _logger?.LogInformation($"Region {regionId} synced successfully. " +
+                            $"Schools: {result.SchoolsAdded} added, {result.SchoolsUpdated} updated. " +
+                            $"Classrooms: {result.ClassroomsAdded} added, {result.ClassroomsUpdated} updated. " +
+                            $"Pupils: {result.PupilsAdded} added, {result.PupilsUpdated} updated.");
+                    }
+                    else
+                    {
+                        _logger?.LogError($"Region {regionId} sync failed: {result.ErrorMessage}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, $"Exception while syncing region {regionId}");
+                    results.Add(new SyncResult
+                    {
+                        Success = false,
+                        ErrorMessage = ex.Message,
+                        RegionId = regionId
+                    });
+                }
+            }
+
+            var syncEndTime = DateTime.UtcNow;
+            var successCount = results.Count(r => r.Success);
+            var failedCount = results.Count(r => !r.Success);
+
+            // Create summary of all changes
+            var summary = new SyncChangesSummaryDto
+            {
+                SyncCompletedAt = syncEndTime,
+                TotalRegionsProcessed = regionIds.Length,
+                SuccessfulRegions = successCount,
+                FailedRegions = failedCount,
+                TotalSchoolsAdded = results.Sum(r => r.SchoolsAdded),
+                TotalSchoolsUpdated = results.Sum(r => r.SchoolsUpdated),
+                TotalClassroomsAdded = results.Sum(r => r.ClassroomsAdded),
+                TotalClassroomsUpdated = results.Sum(r => r.ClassroomsUpdated),
+                TotalPupilsAdded = results.Sum(r => r.PupilsAdded),
+                TotalPupilsUpdated = results.Sum(r => r.PupilsUpdated)
+            };
+
+            // Aggregate all changed entities
+            foreach (var result in results.Where(r => r.Success))
+            {
+                summary.AllSchoolsAdded.AddRange(result.SchoolsAddedList);
+                summary.AllSchoolsUpdated.AddRange(result.SchoolsUpdatedList);
+                summary.AllClassroomsAdded.AddRange(result.ClassroomsAddedList);
+                summary.AllClassroomsUpdated.AddRange(result.ClassroomsUpdatedList);
+                summary.AllPupilsAdded.AddRange(result.PupilsAddedList);
+                summary.AllPupilsUpdated.AddRange(result.PupilsUpdatedList);
+            }
+
+            // Generate and save JSON file
+            await SaveChangesToJsonFile(summary);
+
+            // Get changed entities for external API
+            var changedEntities = GetChangedEntities(results);
+
+            _logger?.LogInformation($"Sync completed for all regions. " +
+                $"Success: {successCount}/{regionIds.Length}. " +
+                $"Total - Schools: {summary.TotalSchoolsAdded} added, {summary.TotalSchoolsUpdated} updated. " +
+                $"Classrooms: {summary.TotalClassroomsAdded} added, {summary.TotalClassroomsUpdated} updated. " +
+                $"Pupils: {summary.TotalPupilsAdded} added, {summary.TotalPupilsUpdated} updated. " +
+                $"Changes saved to JSON file.");
+
+            // TODO: Send changedEntities to external API here
+            // await SendToExternalApi(changedEntities);
+        }
+
+        /// <summary>
+        /// Returns a list of all changed entities (added and updated) as DTOs.
+        /// This function can be used to send data to another API.
+        /// </summary>
+        public ChangedEntitiesDto GetChangedEntities(List<SyncResult> syncResults)
+        {
+            var changedEntities = new ChangedEntitiesDto();
+
+            foreach (var result in syncResults.Where(r => r.Success))
+            {
+                changedEntities.SchoolsAdded.AddRange(result.SchoolsAddedList);
+                changedEntities.SchoolsUpdated.AddRange(result.SchoolsUpdatedList);
+                changedEntities.ClassroomsAdded.AddRange(result.ClassroomsAddedList);
+                changedEntities.ClassroomsUpdated.AddRange(result.ClassroomsUpdatedList);
+                changedEntities.PupilsAdded.AddRange(result.PupilsAddedList);
+                changedEntities.PupilsUpdated.AddRange(result.PupilsUpdatedList);
+            }
+
+            return changedEntities;
+        }
+
+        /// <summary>
+        /// Saves the sync changes summary to a JSON file
+        /// </summary>
+        private async Task SaveChangesToJsonFile(SyncChangesSummaryDto summary)
+        {
+            try
+            {
+                var json = JsonConvert.SerializeObject(summary, Formatting.Indented, new JsonSerializerSettings
+                {
+                    NullValueHandling = NullValueHandling.Ignore,
+                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ"
+                });
+
+                // Create a directory for sync reports if it doesn't exist
+                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
+                if (!Directory.Exists(reportsDirectory))
+                {
+                    Directory.CreateDirectory(reportsDirectory);
+                }
+
+                // Save with timestamp in filename
+                var fileName = $"sync-changes-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
+                var filePath = Path.Combine(reportsDirectory, fileName);
+
+                await File.WriteAllTextAsync(filePath, json);
+
+                // Also save as "latest" for easy access
+                var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
+                await File.WriteAllTextAsync(latestFilePath, json);
+
+                _logger?.LogInformation($"Sync changes saved to: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to save sync changes to JSON file");
+            }
+        }
+
+        /// <summary>
+        /// HTTP endpoint to sync a specific region
+        /// </summary>
+        /// <summary>
+        /// Internal method that performs the sync operation for a single region
+        /// </summary>
+        private async Task<SyncResult> SyncRegionInternal(int regionId)
+        {
+            var result = new SyncResult
+            {
+                RegionId = regionId,
+                Success = false
+            };
+
             try
             {
                 using var client = new HttpClient();
@@ -228,6 +486,9 @@ namespace PordznakanAPI.Controllers
                         {
                             existingSchool.UpdatedAt = DateTime.UtcNow;
                             schoolsUpdated++;
+                            
+                            // Track updated school using DTO
+                            result.SchoolsUpdatedList.Add(MapToSchoolDto(existingSchool));
                         }
 
                         schoolMapping[school.KtakSchoolId] = existingSchool.DshhSchoolId;
@@ -238,6 +499,9 @@ namespace PordznakanAPI.Controllers
                         _context.Schools.Add(school);
                         schoolMapping[school.KtakSchoolId] = school.DshhSchoolId;
                         schoolsAdded++;
+                        
+                        // Track added school using DTO
+                        result.SchoolsAddedList.Add(MapToSchoolDto(school));
                     }
                 }
 
@@ -304,6 +568,9 @@ namespace PordznakanAPI.Controllers
                         {
                             existingClassroom.UpdatedAt = DateTime.UtcNow;
                             classroomsUpdated++;
+                            
+                            // Track updated classroom using DTO
+                            result.ClassroomsUpdatedList.Add(MapToClassroomDto(existingClassroom));
                         }
 
                         classroomMapping[classroomKey] = existingClassroom.Id;
@@ -314,6 +581,9 @@ namespace PordznakanAPI.Controllers
                         _context.Classrooms.Add(classroom);
                         classroomMapping[classroomKey] = classroom.Id;
                         classroomsAdded++;
+                        
+                        // Track added classroom using DTO
+                        result.ClassroomsAddedList.Add(MapToClassroomDto(classroom));
                     }
                 }
 
@@ -414,6 +684,9 @@ namespace PordznakanAPI.Controllers
                         {
                             existingPupil.UpdatedAt = DateTime.UtcNow;
                             pupilsUpdated++;
+                            
+                            // Track updated pupil using DTO
+                            result.PupilsUpdatedList.Add(MapToPupilDto(existingPupil));
                         }
                     }
                     else
@@ -434,29 +707,183 @@ namespace PordznakanAPI.Controllers
                     await _context.SaveChangesAsync();
                 }
 
+                // Track added pupils after save using DTOs
+                foreach (var pupil in newPupils)
+                {
+                    result.PupilsAddedList.Add(MapToPupilDto(pupil));
+                }
+
+                // Set result properties
+                result.Success = true;
+                result.SchoolsProcessed = schoolsToProcess.Count;
+                result.SchoolsAdded = schoolsAdded;
+                result.SchoolsUpdated = schoolsUpdated;
+                result.ClassroomsProcessed = classroomsToProcess.Count;
+                result.ClassroomsAdded = classroomsAdded;
+                result.ClassroomsUpdated = classroomsUpdated;
+                result.PupilsProcessed = pupilsToProcess.Count;
+                result.PupilsAdded = newPupils.Count;
+                result.PupilsUpdated = pupilsUpdated;
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                result.Success = false;
+                result.ErrorMessage = ex.Message;
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// HTTP endpoint to sync a specific region
+        /// </summary>
+        [HttpPost("sync/{regionId?}")]
+        public async Task<IActionResult> Sync([FromRoute] int regionId = 1)
+        {
+            var result = await SyncRegionInternal(regionId);
+            
+            if (result.Success)
+            {
                 return Ok(new
                 {
                     message = "Sync completed successfully!",
-                    regionId,
-                    schoolsProcessed = schoolsToProcess.Count,
-                    schoolsAdded,
-                    schoolsUpdated,
-                    classroomsProcessed = classroomsToProcess.Count,
-                    classroomsAdded,
-                    classroomsUpdated,
-                    pupilsProcessed = pupilsToProcess.Count,
-                    pupilsAdded = newPupils.Count,
-                    pupilsUpdated
+                    regionId = result.RegionId,
+                    schoolsProcessed = result.SchoolsProcessed,
+                    schoolsAdded = result.SchoolsAdded,
+                    schoolsUpdated = result.SchoolsUpdated,
+                    classroomsProcessed = result.ClassroomsProcessed,
+                    classroomsAdded = result.ClassroomsAdded,
+                    classroomsUpdated = result.ClassroomsUpdated,
+                    pupilsProcessed = result.PupilsProcessed,
+                    pupilsAdded = result.PupilsAdded,
+                    pupilsUpdated = result.PupilsUpdated
                 });
+            }
+            else
+            {
+                return StatusCode(500, new
+                {
+                    error = "Sync failed",
+                    message = result.ErrorMessage,
+                    regionId = result.RegionId
+                });
+            }
+        }
+
+        /// <summary>
+        /// HTTP endpoint to get the latest sync changes JSON
+        /// </summary>
+        [HttpGet("sync-changes/latest")]
+        public IActionResult GetLatestSyncChanges()
+        {
+            try
+            {
+                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
+                var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
+
+                if (!File.Exists(latestFilePath))
+                {
+                    return NotFound(new { message = "No sync changes file found. Run a sync first." });
+                }
+
+                var jsonContent = File.ReadAllText(latestFilePath);
+                var summary = JsonConvert.DeserializeObject<SyncChangesSummaryDto>(jsonContent);
+
+                return Ok(summary);
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new
                 {
-                    error = "Sync failed",
-                    message = ex.Message,
-                    innerException = ex.InnerException?.Message,
-                    stackTrace = ex.StackTrace
+                    error = "Failed to retrieve sync changes",
+                    message = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// HTTP endpoint to get all sync change files
+        /// </summary>
+        [HttpGet("sync-changes/files")]
+        public IActionResult GetSyncChangeFiles()
+        {
+            try
+            {
+                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
+                
+                if (!Directory.Exists(reportsDirectory))
+                {
+                    return Ok(new { files = new List<string>() });
+                }
+
+                var files = Directory.GetFiles(reportsDirectory, "sync-changes-*.json")
+                    .Select(f => new FileInfo(f))
+                    .OrderByDescending(f => f.CreationTime)
+                    .Select(f => new
+                    {
+                        fileName = f.Name,
+                        filePath = f.FullName,
+                        created = f.CreationTime,
+                        size = f.Length
+                    })
+                    .ToList();
+
+                return Ok(new { files });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "Failed to retrieve sync change files",
+                    message = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// HTTP endpoint to get changed entities from the latest sync.
+        /// Returns all added and updated schools, classrooms, and pupils as DTOs.
+        /// </summary>
+        [HttpGet("changed-entities/latest")]
+        public IActionResult GetLatestChangedEntities()
+        {
+            try
+            {
+                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
+                var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
+
+                if (!File.Exists(latestFilePath))
+                {
+                    return NotFound(new { message = "No sync changes file found. Run a sync first." });
+                }
+
+                var jsonContent = File.ReadAllText(latestFilePath);
+                var summary = JsonConvert.DeserializeObject<SyncChangesSummaryDto>(jsonContent);
+
+                if (summary == null)
+                {
+                    return NotFound(new { message = "Could not parse sync changes file." });
+                }
+
+                var changedEntities = new ChangedEntitiesDto
+                {
+                    SchoolsAdded = summary.AllSchoolsAdded,
+                    SchoolsUpdated = summary.AllSchoolsUpdated,
+                    ClassroomsAdded = summary.AllClassroomsAdded,
+                    ClassroomsUpdated = summary.AllClassroomsUpdated,
+                    PupilsAdded = summary.AllPupilsAdded,
+                    PupilsUpdated = summary.AllPupilsUpdated
+                };
+
+                return Ok(changedEntities);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "Failed to retrieve changed entities",
+                    message = ex.Message
                 });
             }
         }
