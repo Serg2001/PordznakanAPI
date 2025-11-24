@@ -1,6 +1,4 @@
-﻿using PordznakanAPI.Enums;
-
-namespace PordznakanAPI.Models
+﻿namespace PordznakanAPI.Models
 {
     public class Pupil
     {
@@ -9,10 +7,6 @@ namespace PordznakanAPI.Models
         public string KtakSchoolId { get; set; } = string.Empty;  // schools_id from external API
         public string ClassroomId { get; set; } = string.Empty;  // classroom id from external API (KtakClassroomId)
         public Guid? ClassroomInternalId { get; set; }  // Foreign key to Classroom.Id (internal database ID)
-        public string Grade { get; set; } = string.Empty;
-        public string Classifier { get; set; } = string.Empty;
-        public string Class { get; set; } = string.Empty;
-        public string? Stream { get; set; }
         public string FirstName { get; set; } = string.Empty;  // first_name
         public string LastName { get; set; } = string.Empty;  // last_name
         public string FatherName { get; set; } = string.Empty;  // father_name

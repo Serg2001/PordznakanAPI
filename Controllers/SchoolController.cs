@@ -161,10 +161,6 @@ namespace PordznakanAPI.Controllers
                                                             KtakSchoolId = ktakSchoolId,
                                                             ClassroomId = ktakClassroomId,
                                                             ClassroomInternalId = null, // Will be set after classrooms are saved
-                                                            Grade = classroomToAdd.Grade,
-                                                            Classifier = classroomToAdd.Classifier,
-                                                            Class = classroomToAdd.ClassName,
-                                                            Stream = classroomToAdd.Stream,
                                                             FirstName = student["first_name"]?.ToString() ?? "",
                                                             LastName = student["last_name"]?.ToString() ?? "",
                                                             FatherName = student["father_name"]?.ToString() ?? "",
@@ -366,26 +362,6 @@ namespace PordznakanAPI.Controllers
                         if (existingPupil.ClassroomInternalId != pupil.ClassroomInternalId)
                         {
                             existingPupil.ClassroomInternalId = pupil.ClassroomInternalId;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.Grade != pupil.Grade)
-                        {
-                            existingPupil.Grade = pupil.Grade;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.Classifier != pupil.Classifier)
-                        {
-                            existingPupil.Classifier = pupil.Classifier;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.Class != pupil.Class)
-                        {
-                            existingPupil.Class = pupil.Class;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.Stream != pupil.Stream)
-                        {
-                            existingPupil.Stream = pupil.Stream;
                             hasChanges = true;
                         }
                         if (existingPupil.FirstName != pupil.FirstName)

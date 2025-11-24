@@ -24,8 +24,8 @@ namespace PordznakanAPI.Data
                 .HasKey(s => s.DshhSchoolId);  // Set DshhSchoolId as primary key
 
             modelBuilder.Entity<School>()
-                .HasIndex(s => s.KtakSchoolId)
-                .IsUnique();  // Index for querying by external API ID
+                .HasIndex(s => s.KtakSchoolId);
+                //.IsUnique();  // Index for querying by external API ID
 
             modelBuilder.Entity<School>()
                 .HasIndex(s => s.RegionId);  // Index for querying by region
@@ -35,8 +35,8 @@ namespace PordznakanAPI.Data
                 .HasKey(c => c.Id);
 
             modelBuilder.Entity<Classroom>()
-                .HasIndex(c => new { c.KtakSchoolId, c.KtakClassroomId })
-                .IsUnique();  // Unique index for external API ID combination
+                .HasIndex(c => new { c.KtakSchoolId, c.KtakClassroomId });
+                //.IsUnique();  // Unique index for external API ID combination
 
             modelBuilder.Entity<Classroom>()
                 .HasOne(c => c.School)
@@ -49,8 +49,8 @@ namespace PordznakanAPI.Data
                 .HasKey(p => p.Id);
 
             modelBuilder.Entity<Pupil>()
-                .HasIndex(p => new { p.KtakSchoolId, p.ClassroomId, p.IdentDocumentNumber })
-                .IsUnique();  // Composite unique index for external API identification
+                .HasIndex(p => new { p.KtakSchoolId, p.ClassroomId, p.IdentDocumentNumber });
+                //.IsUnique();  // Composite unique index for external API identification
 
             modelBuilder.Entity<Pupil>()
                 .HasIndex(p => p.KtakPupilId);  // Index for querying by external pupil ID
