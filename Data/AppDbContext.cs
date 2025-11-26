@@ -15,6 +15,7 @@ namespace PordznakanAPI.Data
 
         public DbSet<Pupil> Pupils { get; set; }
         public DbSet<Employee> Employees { get; set; }
+        public DbSet<Teacher> Teachers { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -60,6 +61,14 @@ namespace PordznakanAPI.Data
                 .WithMany(c => c.Pupils)
                 .HasForeignKey(p => p.ClassroomInternalId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Configure Teacher entity
+            modelBuilder.Entity<Teacher>()
+                .HasKey(t => t.Id);
+
+            modelBuilder.Entity<Teacher>()
+                .HasIndex(t => t.PersonId)
+                .IsUnique();
         }
     }
 }

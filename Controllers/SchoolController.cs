@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
+using System.IO;
 
 namespace PordznakanAPI.Controllers
 {
@@ -25,22 +26,16 @@ namespace PordznakanAPI.Controllers
         public int PupilsUpdated { get; set; }
         
         // Lists of changed entities using DTOs
-        public List<SchoolDto> SchoolsAddedList { get; set; } = new();
         public List<SchoolDto> SchoolsUpdatedList { get; set; } = new();
-        public List<ClassroomDto> ClassroomsAddedList { get; set; } = new();
         public List<ClassroomDto> ClassroomsUpdatedList { get; set; } = new();
-        public List<PupilDto> PupilsAddedList { get; set; } = new();
         public List<PupilDto> PupilsUpdatedList { get; set; } = new();
     }
 
     // Class to hold all changed entities for external API
     public class ChangedEntitiesDto
     {
-        public List<SchoolDto> SchoolsAdded { get; set; } = new();
         public List<SchoolDto> SchoolsUpdated { get; set; } = new();
-        public List<ClassroomDto> ClassroomsAdded { get; set; } = new();
         public List<ClassroomDto> ClassroomsUpdated { get; set; } = new();
-        public List<PupilDto> PupilsAdded { get; set; } = new();
         public List<PupilDto> PupilsUpdated { get; set; } = new();
     }
 
@@ -180,11 +175,8 @@ namespace PordznakanAPI.Controllers
             // Aggregate all changed entities
             foreach (var result in results.Where(r => r.Success))
             {
-                summary.AllSchoolsAdded.AddRange(result.SchoolsAddedList);
                 summary.AllSchoolsUpdated.AddRange(result.SchoolsUpdatedList);
-                summary.AllClassroomsAdded.AddRange(result.ClassroomsAddedList);
                 summary.AllClassroomsUpdated.AddRange(result.ClassroomsUpdatedList);
-                summary.AllPupilsAdded.AddRange(result.PupilsAddedList);
                 summary.AllPupilsUpdated.AddRange(result.PupilsUpdatedList);
             }
 
@@ -215,11 +207,8 @@ namespace PordznakanAPI.Controllers
 
             foreach (var result in syncResults.Where(r => r.Success))
             {
-                changedEntities.SchoolsAdded.AddRange(result.SchoolsAddedList);
                 changedEntities.SchoolsUpdated.AddRange(result.SchoolsUpdatedList);
-                changedEntities.ClassroomsAdded.AddRange(result.ClassroomsAddedList);
                 changedEntities.ClassroomsUpdated.AddRange(result.ClassroomsUpdatedList);
-                changedEntities.PupilsAdded.AddRange(result.PupilsAddedList);
                 changedEntities.PupilsUpdated.AddRange(result.PupilsUpdatedList);
             }
 
@@ -250,11 +239,11 @@ namespace PordznakanAPI.Controllers
                 var fileName = $"sync-changes-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
                 var filePath = Path.Combine(reportsDirectory, fileName);
 
-                await File.WriteAllTextAsync(filePath, json);
+                await System.IO.File.WriteAllTextAsync(filePath, json);
 
                 // Also save as "latest" for easy access
                 var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
-                await File.WriteAllTextAsync(latestFilePath, json);
+                await System.IO.File.WriteAllTextAsync(latestFilePath, json);
 
                 _logger?.LogInformation($"Sync changes saved to: {filePath}");
             }
@@ -499,9 +488,6 @@ namespace PordznakanAPI.Controllers
                         _context.Schools.Add(school);
                         schoolMapping[school.KtakSchoolId] = school.DshhSchoolId;
                         schoolsAdded++;
-                        
-                        // Track added school using DTO
-                        result.SchoolsAddedList.Add(MapToSchoolDto(school));
                     }
                 }
 
@@ -581,9 +567,6 @@ namespace PordznakanAPI.Controllers
                         _context.Classrooms.Add(classroom);
                         classroomMapping[classroomKey] = classroom.Id;
                         classroomsAdded++;
-                        
-                        // Track added classroom using DTO
-                        result.ClassroomsAddedList.Add(MapToClassroomDto(classroom));
                     }
                 }
 
@@ -708,11 +691,6 @@ namespace PordznakanAPI.Controllers
                 }
 
                 // Track added pupils after save using DTOs
-                foreach (var pupil in newPupils)
-                {
-                    result.PupilsAddedList.Add(MapToPupilDto(pupil));
-                }
-
                 // Set result properties
                 result.Success = true;
                 result.SchoolsProcessed = schoolsToProcess.Count;
@@ -782,12 +760,12 @@ namespace PordznakanAPI.Controllers
                 var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
                 var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
 
-                if (!File.Exists(latestFilePath))
+                if (!System.IO.File.Exists(latestFilePath))
                 {
                     return NotFound(new { message = "No sync changes file found. Run a sync first." });
                 }
 
-                var jsonContent = File.ReadAllText(latestFilePath);
+                var jsonContent = System.IO.File.ReadAllText(latestFilePath);
                 var summary = JsonConvert.DeserializeObject<SyncChangesSummaryDto>(jsonContent);
 
                 return Ok(summary);
@@ -853,12 +831,12 @@ namespace PordznakanAPI.Controllers
                 var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
                 var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
 
-                if (!File.Exists(latestFilePath))
+                if (!System.IO.File.Exists(latestFilePath))
                 {
                     return NotFound(new { message = "No sync changes file found. Run a sync first." });
                 }
 
-                var jsonContent = File.ReadAllText(latestFilePath);
+                var jsonContent = System.IO.File.ReadAllText(latestFilePath);
                 var summary = JsonConvert.DeserializeObject<SyncChangesSummaryDto>(jsonContent);
 
                 if (summary == null)
@@ -868,11 +846,8 @@ namespace PordznakanAPI.Controllers
 
                 var changedEntities = new ChangedEntitiesDto
                 {
-                    SchoolsAdded = summary.AllSchoolsAdded,
                     SchoolsUpdated = summary.AllSchoolsUpdated,
-                    ClassroomsAdded = summary.AllClassroomsAdded,
                     ClassroomsUpdated = summary.AllClassroomsUpdated,
-                    PupilsAdded = summary.AllPupilsAdded,
                     PupilsUpdated = summary.AllPupilsUpdated
                 };
 

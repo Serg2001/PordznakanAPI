@@ -57,11 +57,8 @@ namespace PordznakanAPI.DTOs
         public int TotalClassroomsUpdated { get; set; }
         public int TotalPupilsAdded { get; set; }
         public int TotalPupilsUpdated { get; set; }
-        public List<SchoolDto> AllSchoolsAdded { get; set; } = new();
         public List<SchoolDto> AllSchoolsUpdated { get; set; } = new();
-        public List<ClassroomDto> AllClassroomsAdded { get; set; } = new();
         public List<ClassroomDto> AllClassroomsUpdated { get; set; } = new();
-        public List<PupilDto> AllPupilsAdded { get; set; } = new();
         public List<PupilDto> AllPupilsUpdated { get; set; } = new();
     }
 }

@@ -6,6 +6,7 @@ using PordznakanAPI.Data;
 using Hangfire;
 using Hangfire.SqlServer;
 using PordznakanAPI.Controllers;
+using Hangfire.Dashboard;
 
 var builder = WebApplication.CreateBuilder(args);
 
