@@ -12,8 +12,8 @@ using PordznakanAPI.Data;
 namespace PordznakanAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251126093436_AddTeachers")]
-    partial class AddTeachers
+    [Migration("20251203110725_AddPupilMd5AndStaging")]
+    partial class AddPupilMd5AndStaging
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -124,6 +124,16 @@ namespace PordznakanAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateOnly>("Birthday")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Certificate")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CertificateType")
+                        .HasColumnType("int");
+
                     b.Property<string>("ClassroomId")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -134,9 +144,6 @@ namespace PordznakanAPI.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("DateOfBirth")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("FatherName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -145,41 +152,34 @@ namespace PordznakanAPI.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("FromCountry")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<bool>("Gender")
+                        .HasColumnType("bit");
 
-                    b.Property<string>("IdentDocument")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Grade")
+                        .HasColumnType("int");
 
-                    b.Property<string>("IdentDocumentNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                    b.Property<int>("KtakPupilId")
+                        .HasColumnType("int");
 
-                    b.Property<string>("KtakPupilId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("KtakSchoolId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                    b.Property<int>("KtakSchoolId")
+                        .HasColumnType("int");
 
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Sex")
+                    b.Property<string>("MD5")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("SocNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Place")
+                        .HasColumnType("int");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SubGrade")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -190,9 +190,80 @@ namespace PordznakanAPI.Migrations
 
                     b.HasIndex("KtakPupilId");
 
-                    b.HasIndex("KtakSchoolId", "ClassroomId", "IdentDocumentNumber");
+                    b.HasIndex("KtakSchoolId", "ClassroomId", "Place");
 
                     b.ToTable("Pupils");
+                });
+
+            modelBuilder.Entity("PordznakanAPI.Models.PupilStaging", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("Birthday")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Certificate")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CertificateType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ClassroomId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("ClassroomInternalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FatherName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Gender")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Grade")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KtakPupilId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KtakSchoolId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MD5")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Place")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SubGrade")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PupilsStaging", (string)null);
                 });
 
             modelBuilder.Entity("PordznakanAPI.Models.Teacher", b =>

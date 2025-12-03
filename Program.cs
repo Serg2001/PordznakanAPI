@@ -16,10 +16,13 @@ builder.Services.AddControllers();
 // Configure OpenAPI (Swagger) for development
 builder.Services.AddOpenApi();
 
-// Configure DbContext with SQL Server
+// Configure DbContext with SQL Server (60 second command timeout)
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions => sqlOptions.CommandTimeout(200) // 60 seconds timeout
+    );
 });
 
 // Configure Hangfire
@@ -93,7 +96,7 @@ try
     RecurringJob.AddOrUpdate<PupilController>(
         "sync-all-regions-daily",
         controller => controller.SyncAllRegions(),
-        "1 0 * * *", // Cron expression: At 00:01 every day
+        "1 00 * * *", // Cron expression: At 00:01 every day
         timezone);
 }
 catch (TimeZoneNotFoundException)
@@ -103,7 +106,7 @@ catch (TimeZoneNotFoundException)
     RecurringJob.AddOrUpdate<PupilController>(
         "sync-all-regions-daily",
         controller => controller.SyncAllRegions(),
-        "1 20 * * *", // 20:01 UTC = 00:01 next day in Armenia
+        "1 00 * * *", // 20:01 UTC = 00:01 next day in Armenia
         TimeZoneInfo.Utc);
 }
 

@@ -14,6 +14,7 @@ namespace PordznakanAPI.Data
         public DbSet<Classroom> Classrooms { get; set; }
 
         public DbSet<Pupil> Pupils { get; set; }
+        public DbSet<PupilStaging> PupilsStaging { get; set; }
         public DbSet<Employee> Employees { get; set; }
         public DbSet<Teacher> Teachers { get; set; }
 
@@ -50,8 +51,8 @@ namespace PordznakanAPI.Data
                 .HasKey(p => p.Id);
 
             modelBuilder.Entity<Pupil>()
-                .HasIndex(p => new { p.KtakSchoolId, p.ClassroomId, p.IdentDocumentNumber });
-                //.IsUnique();  // Composite unique index for external API identification
+                .HasIndex(p => new { p.KtakSchoolId, p.ClassroomId, p.Place });
+                //.IsUnique();  // Composite index for external API identification
 
             modelBuilder.Entity<Pupil>()
                 .HasIndex(p => p.KtakPupilId);  // Index for querying by external pupil ID
@@ -61,6 +62,13 @@ namespace PordznakanAPI.Data
                 .WithMany(c => c.Pupils)
                 .HasForeignKey(p => p.ClassroomInternalId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Configure Pupil staging entity (same schema, different table)
+            modelBuilder.Entity<PupilStaging>()
+                .ToTable("PupilsStaging");
+
+            modelBuilder.Entity<PupilStaging>()
+                .HasKey(p => p.Id);
 
             // Configure Teacher entity
             modelBuilder.Entity<Teacher>()

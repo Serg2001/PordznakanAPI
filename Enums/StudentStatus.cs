@@ -1,6 +1,6 @@
 ﻿namespace PordznakanAPI.Enums
 {
-    public enum StudentStatus
+    public enum EPupilStatus
     {
         Օld,
         New,

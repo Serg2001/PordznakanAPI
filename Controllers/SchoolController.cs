@@ -5,7 +5,10 @@ using Newtonsoft.Json.Linq;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
+using PordznakanAPI.Enums;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PordznakanAPI.Controllers
 {
@@ -95,18 +98,136 @@ namespace PordznakanAPI.Controllers
                 KtakSchoolId = pupil.KtakSchoolId,
                 ClassroomId = pupil.ClassroomId,
                 ClassroomInternalId = pupil.ClassroomInternalId,
+                Place = pupil.Place,
+                Grade = pupil.Grade,
+                SubGrade = pupil.SubGrade,
                 FirstName = pupil.FirstName,
                 LastName = pupil.LastName,
                 FatherName = pupil.FatherName,
-                IdentDocument = pupil.IdentDocument,
-                IdentDocumentNumber = pupil.IdentDocumentNumber,
-                FromCountry = pupil.FromCountry,
-                SocNumber = pupil.SocNumber,
-                DateOfBirth = pupil.DateOfBirth,
-                Sex = pupil.Sex,
+                CertificateType = pupil.CertificateType,
+                Certificate = pupil.Certificate,
+                Birthday = pupil.Birthday,
+                Gender = pupil.Gender,
                 Status = pupil.Status,
                 CreatedAt = pupil.CreatedAt,
                 UpdatedAt = pupil.UpdatedAt
+            };
+        }
+
+        // === Helper for MD5 generation ===
+        private static string ComputePupilMd5(int ktakPupilId, int ktakSchoolId, string classroomId,
+            KtakPlace place, EGrade grade, ESubGrade subGrade,
+            string firstName, string lastName, string fatherName,
+            ECertificateType certificateType, string certificate,
+            DateOnly birthday, bool gender, EPupilStatus status)
+        {
+            var raw = string.Join('|', new[]
+            {
+                ktakPupilId.ToString(),
+                ktakSchoolId.ToString(),
+                classroomId ?? string.Empty,
+                place.ToString(),
+                grade.ToString(),
+                subGrade.ToString(),
+                firstName ?? string.Empty,
+                lastName ?? string.Empty,
+                fatherName ?? string.Empty,
+                certificateType.ToString(),
+                certificate ?? string.Empty,
+                birthday.ToString("yyyy-MM-dd"),
+                gender ? "1" : "0",
+                status.ToString()
+            });
+
+            using var md5 = MD5.Create();
+            var bytes = Encoding.UTF8.GetBytes(raw);
+            var hash = md5.ComputeHash(bytes);
+            return Convert.ToHexString(hash);
+        }
+
+        // === Helper mappers for enums ===
+        private static EGrade MapGrade(string? grade)
+        {
+            if (int.TryParse(grade, out var g) && g >= 1 && g <= 12)
+            {
+                return (EGrade)g;
+            }
+            return 0; // default
+        }
+
+        private static ESubGrade MapSubGrade(string? classifier)
+        {
+            if (string.IsNullOrWhiteSpace(classifier))
+                return ESubGrade.Unknown;
+
+            // normalize Armenian letters
+            return classifier.Trim() switch
+            {
+                "ա" => ESubGrade.Sg1,
+                "բ" => ESubGrade.Sg2,
+                "գ" => ESubGrade.Sg3,
+                "դ" => ESubGrade.Sg4,
+                "ե" => ESubGrade.Sg5,
+                "զ" => ESubGrade.Sg6,
+                "է" => ESubGrade.Sg7,
+                "ը" => ESubGrade.Sg8,
+                "թ" => ESubGrade.Sg9,
+                "ժ" => ESubGrade.Sg10,
+                "ի" => ESubGrade.Sg11,
+                "լ" => ESubGrade.Sg12,
+                "խ" => ESubGrade.Sg13,
+                "ծ" => ESubGrade.Sg14,
+                "կ" => ESubGrade.Sg15,
+                "հ" => ESubGrade.Sg16,
+                "ձ" => ESubGrade.Sg17,
+                "ռ" => ESubGrade.Sg18,
+                _ => ESubGrade.Unknown
+            };
+        }
+
+        private static ECertificateType MapCertificateType(string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+                return ECertificateType.Unknown;
+
+            // If API already returns numeric code matching enum values
+            if (int.TryParse(code, out var numeric) && Enum.IsDefined(typeof(ECertificateType), numeric))
+            {
+                return (ECertificateType)numeric;
+            }
+
+            // Fallback simple name-based mapping
+            var normalized = code.Trim().ToLowerInvariant();
+            if (normalized.Contains("birth"))
+                return ECertificateType.HHCertificate;
+            if (normalized.Contains("passport"))
+                return ECertificateType.HHPasport;
+
+            return ECertificateType.Other;
+        }
+
+        private static bool MapGender(string? sexCode)
+        {
+            // Adjust mapping according to real API semantics.
+            // For now: treat "47" or "1" as male, everything else as female/false.
+            var v = sexCode?.Trim();
+            return v == "47" || v == "1" || string.Equals(v, "m", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static EPupilStatus MapPupilStatus(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+                return EPupilStatus.New;
+
+            var s = status.Trim().ToLowerInvariant();
+            return s switch
+            {
+                "old" => EPupilStatus.Օld,
+                "new" => EPupilStatus.New,
+                "repeater" => EPupilStatus.Repeater,
+                "incomplete" => EPupilStatus.Incomplete,
+                "graduated" => EPupilStatus.Graduated,
+                _ => EPupilStatus.New
             };
         }
 
@@ -277,10 +398,11 @@ namespace PordznakanAPI.Controllers
                 // === Step 1: Collect all schools, classrooms, and pupils from JSON ===
                 var schoolsToProcess = new List<School>();
                 var classroomsToProcess = new List<Classroom>();
-                var pupilsToProcess = new List<Pupil>();
                 var schoolKtakIds = new HashSet<string>();
                 var classroomKeys = new HashSet<string>(); // KtakSchoolId-KtakClassroomId
-                var pupilKeys = new HashSet<string>(); // KtakSchoolId-ClassroomId-IdentDocumentNumber
+
+                // Clear staging table for this region
+                await _context.PupilsStaging.ExecuteDeleteAsync();
 
                 foreach (JProperty schoolProp in json.Properties())
                 {
@@ -382,42 +504,74 @@ namespace PordznakanAPI.Controllers
                                                         if (student.Type != JTokenType.Object)
                                                             continue;
 
-                                                        var pupilId = student["id"]?.ToString();
-                                                        if (string.IsNullOrWhiteSpace(pupilId))
+                                                        var pupilIdString = student["id"]?.ToString();
+                                                        if (string.IsNullOrWhiteSpace(pupilIdString))
                                                             continue;
 
+                                                        if (!int.TryParse(pupilIdString, out var pupilId))
+                                                            continue;
+
+                                                        // Parse school id to int
+                                                        int.TryParse(ktakSchoolId, out var ktakSchoolIdInt);
+
                                                         string identDocNumber = student["ident_document_number"]?.ToString() ?? "";
-                                                        string pupilKey = $"{ktakSchoolId}-{ktakClassroomId}-{identDocNumber}";
-                                                        pupilKeys.Add(pupilKey);
 
                                                         // Parse date of birth
-                                                        DateTime? dateOfBirth = null;
+                                                        DateOnly birthday = default;
                                                         var dobString = student["date_of_birth"]?.ToString();
-                                                        if (!string.IsNullOrWhiteSpace(dobString))
+                                                        if (!string.IsNullOrWhiteSpace(dobString)
+                                                            && DateOnly.TryParse(dobString, out var parsedDate))
                                                         {
-                                                            if (DateTime.TryParse(dobString, out DateTime parsedDate))
-                                                            {
-                                                                dateOfBirth = parsedDate;
-                                                            }
+                                                            birthday = parsedDate;
                                                         }
 
-                                                        pupilsToProcess.Add(new Pupil
+                                                        var gradeEnum = MapGrade(cl["grade"]?.ToString());
+                                                        var subGradeEnum = MapSubGrade(cl["classifier"]?.ToString());
+                                                        var certType = MapCertificateType(student["ident_document"]?.ToString());
+                                                        var gender = MapGender(student["sex"]?.ToString());
+                                                        var statusEnum = MapPupilStatus(student["status"]?.ToString());
+
+                                                        var firstName = student["first_name"]?.ToString() ?? "";
+                                                        var lastName = student["last_name"]?.ToString() ?? "";
+                                                        var fatherName = student["father_name"]?.ToString() ?? "";
+
+                                                        // Compute MD5 for this pupil
+                                                        var md5 = ComputePupilMd5(
+                                                            pupilId,
+                                                            ktakSchoolIdInt,
+                                                            ktakClassroomId,
+                                                            KtakPlace.School,
+                                                            gradeEnum,
+                                                            subGradeEnum,
+                                                            firstName,
+                                                            lastName,
+                                                            fatherName,
+                                                            certType,
+                                                            identDocNumber,
+                                                            birthday,
+                                                            gender,
+                                                            statusEnum);
+
+                                                        // Stream directly into staging table
+                                                        _context.PupilsStaging.Add(new PupilStaging
                                                         {
                                                             Id = Guid.NewGuid(),
                                                             KtakPupilId = pupilId,
-                                                            KtakSchoolId = ktakSchoolId,
+                                                            KtakSchoolId = ktakSchoolIdInt,
                                                             ClassroomId = ktakClassroomId,
-                                                            ClassroomInternalId = null, // Will be set after classrooms are saved
-                                                            FirstName = student["first_name"]?.ToString() ?? "",
-                                                            LastName = student["last_name"]?.ToString() ?? "",
-                                                            FatherName = student["father_name"]?.ToString() ?? "",
-                                                            IdentDocument = student["ident_document"]?.ToString() ?? "",
-                                                            IdentDocumentNumber = identDocNumber,
-                                                            FromCountry = student["from_country"]?.ToString() ?? "",
-                                                            SocNumber = student["soc_number"]?.ToString() ?? "",
-                                                            DateOfBirth = dateOfBirth,
-                                                            Sex = student["sex"]?.ToString() ?? "",
-                                                            Status = student["status"]?.ToString() ?? "",
+                                                            ClassroomInternalId = null, // will be set after classrooms are saved
+                                                            Place = KtakPlace.School,
+                                                            Grade = gradeEnum,
+                                                            SubGrade = subGradeEnum,
+                                                            FirstName = firstName,
+                                                            LastName = lastName,
+                                                            FatherName = fatherName,
+                                                            CertificateType = certType,
+                                                            Certificate = identDocNumber,
+                                                            Birthday = birthday,
+                                                            Gender = gender,
+                                                            Status = statusEnum,
+                                                            MD5 = md5,
                                                             CreatedAt = now,
                                                             UpdatedAt = now
                                                         });
@@ -447,38 +601,15 @@ namespace PordznakanAPI.Controllers
                 {
                     if (existingSchoolsDict.TryGetValue(school.KtakSchoolId, out var existingSchool))
                     {
-                        // Update existing school
-                        bool hasChanges = false;
+                        // Overwrite all fields without per-property comparison
+                        existingSchool.Name = school.Name;
+                        existingSchool.Marz = school.Marz;
+                        existingSchool.Region = school.Region;
+                        existingSchool.Community = school.Community;
+                        existingSchool.UpdatedAt = DateTime.UtcNow;
 
-                        if (existingSchool.Name != school.Name)
-                        {
-                            existingSchool.Name = school.Name;
-                            hasChanges = true;
-                        }
-                        if (existingSchool.Marz != school.Marz)
-                        {
-                            existingSchool.Marz = school.Marz;
-                            hasChanges = true;
-                        }
-                        if (existingSchool.Region != school.Region)
-                        {
-                            existingSchool.Region = school.Region;
-                            hasChanges = true;
-                        }
-                        if (existingSchool.Community != school.Community)
-                        {
-                            existingSchool.Community = school.Community;
-                            hasChanges = true;
-                        }
-
-                        if (hasChanges)
-                        {
-                            existingSchool.UpdatedAt = DateTime.UtcNow;
-                            schoolsUpdated++;
-                            
-                            // Track updated school using DTO
-                            result.SchoolsUpdatedList.Add(MapToSchoolDto(existingSchool));
-                        }
+                        schoolsUpdated++;
+                        result.SchoolsUpdatedList.Add(MapToSchoolDto(existingSchool));
 
                         schoolMapping[school.KtakSchoolId] = existingSchool.DshhSchoolId;
                     }
@@ -521,43 +652,16 @@ namespace PordznakanAPI.Controllers
 
                     if (existingClassroomsDict.TryGetValue(classroomKey, out var existingClassroom))
                     {
-                        // Update existing classroom
-                        bool hasChanges = false;
+                        // Overwrite all fields without per-property comparison
+                        existingClassroom.Grade = classroom.Grade;
+                        existingClassroom.Classifier = classroom.Classifier;
+                        existingClassroom.ClassName = classroom.ClassName;
+                        existingClassroom.Stream = classroom.Stream;
+                        existingClassroom.SchoolId = classroom.SchoolId;
+                        existingClassroom.UpdatedAt = DateTime.UtcNow;
 
-                        if (existingClassroom.Grade != classroom.Grade)
-                        {
-                            existingClassroom.Grade = classroom.Grade;
-                            hasChanges = true;
-                        }
-                        if (existingClassroom.Classifier != classroom.Classifier)
-                        {
-                            existingClassroom.Classifier = classroom.Classifier;
-                            hasChanges = true;
-                        }
-                        if (existingClassroom.ClassName != classroom.ClassName)
-                        {
-                            existingClassroom.ClassName = classroom.ClassName;
-                            hasChanges = true;
-                        }
-                        if (existingClassroom.Stream != classroom.Stream)
-                        {
-                            existingClassroom.Stream = classroom.Stream;
-                            hasChanges = true;
-                        }
-                        if (existingClassroom.SchoolId != classroom.SchoolId)
-                        {
-                            existingClassroom.SchoolId = classroom.SchoolId;
-                            hasChanges = true;
-                        }
-
-                        if (hasChanges)
-                        {
-                            existingClassroom.UpdatedAt = DateTime.UtcNow;
-                            classroomsUpdated++;
-                            
-                            // Track updated classroom using DTO
-                            result.ClassroomsUpdatedList.Add(MapToClassroomDto(existingClassroom));
-                        }
+                        classroomsUpdated++;
+                        result.ClassroomsUpdatedList.Add(MapToClassroomDto(existingClassroom));
 
                         classroomMapping[classroomKey] = existingClassroom.Id;
                     }
@@ -576,121 +680,108 @@ namespace PordznakanAPI.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                // === Step 4: Process Pupils ===
-                // Update ClassroomInternalId references in pupils after classrooms are saved
-                foreach (var pupil in pupilsToProcess)
+                // === Step 4: Process Pupils with MD5 + staging (no in-memory Pupil list) ===
+                // Ensure all staged pupils are saved
+                await _context.SaveChangesAsync();
+
+                // Load all staged pupils for this sync
+                var stagingRows = await _context.PupilsStaging.ToListAsync();
+
+                // Update ClassroomInternalId in staging using classroom mapping
+                foreach (var s in stagingRows)
                 {
-                    string classroomKey = $"{pupil.KtakSchoolId}-{pupil.ClassroomId}";
+                    string classroomKey = $"{s.KtakSchoolId}-{s.ClassroomId}";
                     if (classroomMapping.TryGetValue(classroomKey, out var classroomId))
                     {
-                        pupil.ClassroomInternalId = classroomId;
+                        s.ClassroomInternalId = classroomId;
                     }
                 }
 
+                await _context.SaveChangesAsync();
+
+                // Load real pupils that match staged KtakPupilId values
+                var stagedIds = stagingRows.Select(s => s.KtakPupilId).Distinct().ToList();
+
                 var existingPupils = await _context.Pupils
-                    .Where(p => pupilsToProcess.Select(pl => pl.KtakSchoolId).Contains(p.KtakSchoolId) &&
-                                pupilsToProcess.Select(pl => pl.ClassroomId).Contains(p.ClassroomId) &&
-                                pupilsToProcess.Select(pl => pl.IdentDocumentNumber).Contains(p.IdentDocumentNumber))
+                    .Where(p => stagedIds.Contains(p.KtakPupilId))
                     .ToListAsync();
 
-                var existingPupilsDict = existingPupils.ToDictionary(p => $"{p.KtakSchoolId}-{p.ClassroomId}-{p.IdentDocumentNumber}");
+                var existingDict = existingPupils.ToDictionary(p => p.KtakPupilId);
 
                 var newPupils = new List<Pupil>();
-                int pupilsUpdated = 0;
+                var pupilsUpdated = 0;
 
-                foreach (var pupil in pupilsToProcess)
+                foreach (var s in stagingRows)
                 {
-                    string pupilKey = $"{pupil.KtakSchoolId}-{pupil.ClassroomId}-{pupil.IdentDocumentNumber}";
-
-                    if (existingPupilsDict.TryGetValue(pupilKey, out var existingPupil))
+                    if (existingDict.TryGetValue(s.KtakPupilId, out var r))
                     {
-                        // Update existing pupil
-                        bool hasChanges = false;
+                        if (!string.Equals(r.MD5, s.MD5, StringComparison.OrdinalIgnoreCase))
+                        {
+                            // MD5 changed → update real row from staging
+                            r.KtakSchoolId = s.KtakSchoolId;
+                            r.ClassroomId = s.ClassroomId;
+                            r.ClassroomInternalId = s.ClassroomInternalId;
+                            r.Place = s.Place;
+                            r.Grade = s.Grade;
+                            r.SubGrade = s.SubGrade;
+                            r.FirstName = s.FirstName;
+                            r.LastName = s.LastName;
+                            r.FatherName = s.FatherName;
+                            r.CertificateType = s.CertificateType;
+                            r.Certificate = s.Certificate;
+                            r.Birthday = s.Birthday;
+                            r.Gender = s.Gender;
+                            r.Status = s.Status;
+                            r.MD5 = s.MD5;
+                            r.UpdatedAt = DateTime.UtcNow;
 
-                        if (existingPupil.KtakPupilId != pupil.KtakPupilId)
-                        {
-                            existingPupil.KtakPupilId = pupil.KtakPupilId;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.ClassroomInternalId != pupil.ClassroomInternalId)
-                        {
-                            existingPupil.ClassroomInternalId = pupil.ClassroomInternalId;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.FirstName != pupil.FirstName)
-                        {
-                            existingPupil.FirstName = pupil.FirstName;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.LastName != pupil.LastName)
-                        {
-                            existingPupil.LastName = pupil.LastName;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.FatherName != pupil.FatherName)
-                        {
-                            existingPupil.FatherName = pupil.FatherName;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.IdentDocument != pupil.IdentDocument)
-                        {
-                            existingPupil.IdentDocument = pupil.IdentDocument;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.FromCountry != pupil.FromCountry)
-                        {
-                            existingPupil.FromCountry = pupil.FromCountry;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.SocNumber != pupil.SocNumber)
-                        {
-                            existingPupil.SocNumber = pupil.SocNumber;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.DateOfBirth != pupil.DateOfBirth)
-                        {
-                            existingPupil.DateOfBirth = pupil.DateOfBirth;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.Sex != pupil.Sex)
-                        {
-                            existingPupil.Sex = pupil.Sex;
-                            hasChanges = true;
-                        }
-                        if (existingPupil.Status != pupil.Status)
-                        {
-                            existingPupil.Status = pupil.Status;
-                            hasChanges = true;
-                        }
-
-                        if (hasChanges)
-                        {
-                            existingPupil.UpdatedAt = DateTime.UtcNow;
                             pupilsUpdated++;
-                            
-                            // Track updated pupil using DTO
-                            result.PupilsUpdatedList.Add(MapToPupilDto(existingPupil));
+                            result.PupilsUpdatedList.Add(MapToPupilDto(r));
                         }
                     }
                     else
                     {
-                        // Add new pupil
-                        newPupils.Add(pupil);
+                        // New KtakPupilId → insert
+                        newPupils.Add(new Pupil
+                        {
+                            Id = Guid.NewGuid(),
+                            KtakPupilId = s.KtakPupilId,
+                            KtakSchoolId = s.KtakSchoolId,
+                            ClassroomId = s.ClassroomId,
+                            ClassroomInternalId = s.ClassroomInternalId,
+                            Place = s.Place,
+                            Grade = s.Grade,
+                            SubGrade = s.SubGrade,
+                            FirstName = s.FirstName,
+                            LastName = s.LastName,
+                            FatherName = s.FatherName,
+                            CertificateType = s.CertificateType,
+                            Certificate = s.Certificate,
+                            Birthday = s.Birthday,
+                            Gender = s.Gender,
+                            Status = s.Status,
+                            MD5 = s.MD5,
+                            CreatedAt = s.CreatedAt,
+                            UpdatedAt = s.UpdatedAt
+                        });
                     }
                 }
 
-                // Save pupils
+                _logger?.LogInformation($"[Region {regionId}] Pupil MD5 compare done. New={newPupils.Count}, Updated={pupilsUpdated}. Saving...");
+
                 if (newPupils.Any())
                 {
                     _context.Pupils.AddRange(newPupils);
                 }
 
-                if (pupilsUpdated > 0 || newPupils.Any())
+                if (newPupils.Any() || pupilsUpdated > 0)
                 {
                     await _context.SaveChangesAsync();
                 }
 
-                // Track added pupils after save using DTOs
+                // Cleanup staging
+                await _context.PupilsStaging.ExecuteDeleteAsync();
+
                 // Set result properties
                 result.Success = true;
                 result.SchoolsProcessed = schoolsToProcess.Count;
@@ -699,7 +790,7 @@ namespace PordznakanAPI.Controllers
                 result.ClassroomsProcessed = classroomsToProcess.Count;
                 result.ClassroomsAdded = classroomsAdded;
                 result.ClassroomsUpdated = classroomsUpdated;
-                result.PupilsProcessed = pupilsToProcess.Count;
+                result.PupilsProcessed = stagingRows.Count;
                 result.PupilsAdded = newPupils.Count;
                 result.PupilsUpdated = pupilsUpdated;
 

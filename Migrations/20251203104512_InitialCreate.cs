@@ -33,6 +33,72 @@ namespace PordznakanAPI.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "PupilsStaging",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    KtakPupilId = table.Column<int>(type: "int", nullable: false),
+                    KtakSchoolId = table.Column<int>(type: "int", nullable: false),
+                    ClassroomId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ClassroomInternalId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    Place = table.Column<int>(type: "int", nullable: false),
+                    Grade = table.Column<int>(type: "int", nullable: false),
+                    SubGrade = table.Column<int>(type: "int", nullable: false),
+                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    LastName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FatherName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CertificateType = table.Column<int>(type: "int", nullable: false),
+                    Certificate = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Birthday = table.Column<DateOnly>(type: "date", nullable: false),
+                    Gender = table.Column<bool>(type: "bit", nullable: false),
+                    Status = table.Column<int>(type: "int", nullable: false),
+                    MD5 = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PupilsStaging", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Teachers",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    PersonId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    SchoolId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    SchoolName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Activated = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    LastName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FatherName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Sex = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    WorkType = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    SocNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    DateOfBirth = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    Address = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Phone = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Education = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CommandDate = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    SubjectId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    MainSubject = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    PersonPositions = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    SubjectsJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DigitLevel = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Experience = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    AcademicRank = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    AcademicRankId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Teachers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Schools",
                 columns: table => new
                 {
@@ -88,20 +154,22 @@ namespace PordznakanAPI.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    KtakPupilId = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    KtakSchoolId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    KtakPupilId = table.Column<int>(type: "int", nullable: false),
+                    KtakSchoolId = table.Column<int>(type: "int", nullable: false),
                     ClassroomId = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     ClassroomInternalId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    Place = table.Column<int>(type: "int", nullable: false),
+                    Grade = table.Column<int>(type: "int", nullable: false),
+                    SubGrade = table.Column<int>(type: "int", nullable: false),
                     FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     LastName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     FatherName = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    IdentDocument = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    IdentDocumentNumber = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    FromCountry = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    SocNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    DateOfBirth = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    Sex = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Status = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CertificateType = table.Column<int>(type: "int", nullable: false),
+                    Certificate = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Birthday = table.Column<DateOnly>(type: "date", nullable: false),
+                    Gender = table.Column<bool>(type: "bit", nullable: false),
+                    Status = table.Column<int>(type: "int", nullable: false),
+                    MD5 = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
@@ -137,9 +205,9 @@ namespace PordznakanAPI.Migrations
                 column: "KtakPupilId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Pupils_KtakSchoolId_ClassroomId_IdentDocumentNumber",
+                name: "IX_Pupils_KtakSchoolId_ClassroomId_Place",
                 table: "Pupils",
-                columns: new[] { "KtakSchoolId", "ClassroomId", "IdentDocumentNumber" });
+                columns: new[] { "KtakSchoolId", "ClassroomId", "Place" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Schools_EmployeeId",
@@ -155,6 +223,12 @@ namespace PordznakanAPI.Migrations
                 name: "IX_Schools_RegionId",
                 table: "Schools",
                 column: "RegionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Teachers_PersonId",
+                table: "Teachers",
+                column: "PersonId",
+                unique: true);
         }
 
         /// <inheritdoc />
@@ -162,6 +236,12 @@ namespace PordznakanAPI.Migrations
         {
             migrationBuilder.DropTable(
                 name: "Pupils");
+
+            migrationBuilder.DropTable(
+                name: "PupilsStaging");
+
+            migrationBuilder.DropTable(
+                name: "Teachers");
 
             migrationBuilder.DropTable(
                 name: "Classrooms");

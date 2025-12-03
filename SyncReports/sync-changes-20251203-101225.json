@@ -1,0 +1,15 @@
+{
+  "SyncCompletedAt": "2025-12-03T10:12:25.191Z",
+  "TotalRegionsProcessed": 10,
+  "SuccessfulRegions": 0,
+  "FailedRegions": 10,
+  "TotalSchoolsAdded": 0,
+  "TotalSchoolsUpdated": 0,
+  "TotalClassroomsAdded": 0,
+  "TotalClassroomsUpdated": 0,
+  "TotalPupilsAdded": 0,
+  "TotalPupilsUpdated": 0,
+  "AllSchoolsUpdated": [],
+  "AllClassroomsUpdated": [],
+  "AllPupilsUpdated": []
+}
