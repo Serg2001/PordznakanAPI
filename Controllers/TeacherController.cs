@@ -5,7 +5,10 @@ using Newtonsoft.Json.Linq;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
+using PordznakanAPI.Enums;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PordznakanAPI.Controllers
 {
@@ -43,32 +46,195 @@ namespace PordznakanAPI.Controllers
             return new TeacherDto
             {
                 Id = teacher.Id,
-                PersonId = teacher.PersonId,
-                SchoolId = teacher.SchoolId,
-                SchoolName = teacher.SchoolName,
-                Email = teacher.Email,
-                Activated = teacher.Activated,
+                KtakTeacherId = teacher.KtakTeacherId,
+                KtakSchoolId = teacher.KtakSchoolId,
+                Place = teacher.Place,
                 FirstName = teacher.FirstName,
                 LastName = teacher.LastName,
                 FatherName = teacher.FatherName,
-                Sex = teacher.Sex,
-                WorkType = teacher.WorkType,
-                SocNumber = teacher.SocNumber,
-                DateOfBirth = teacher.DateOfBirth,
-                Address = teacher.Address,
+                Gender = teacher.Gender,
+                Birthday = teacher.Birthday,
                 Phone = teacher.Phone,
-                Education = teacher.Education,
-                CommandDate = teacher.CommandDate,
-                SubjectId = teacher.SubjectId,
-                MainSubject = teacher.MainSubject,
-                PersonPositions = teacher.PersonPositions,
-                SubjectsJson = teacher.SubjectsJson,
-                DigitLevel = teacher.DigitLevel,
+                Address = teacher.Address,
+                Email = teacher.Email,
+                SocNumber = teacher.SocNumber,
                 Experience = teacher.Experience,
                 AcademicRank = teacher.AcademicRank,
-                AcademicRankId = teacher.AcademicRankId,
+                Education = teacher.Education,
+                CommandDate = teacher.CommandDate,
+                DigitLevel = teacher.DigitLevel,
+                Activated = teacher.Activated,
+                WorkType = teacher.WorkType,
                 CreatedAt = teacher.CreatedAt,
-                UpdatedAt = teacher.UpdatedAt
+                UpdatedAt = teacher.UpdatedAt,
+                Subjects = teacher.Subjects.Select(s => new TeacherSubjectDto
+                {
+                    SubjectId = s.SubjectId,
+                    Grade = s.Grade,
+                    SubGrade = s.SubGrade,
+                    Name = s.Name
+                }).ToList()
+            };
+        }
+
+        // === Helper for MD5 generation ===
+        private static string ComputeTeacherMd5(
+            int ktakTeacherId,
+            int ktakSchoolId,
+            KtakPlace place,
+            string firstName,
+            string lastName,
+            string fatherName,
+            bool gender,
+            DateOnly? birthday,
+            string phone,
+            string address,
+            string email,
+            string socNumber,
+            int experience,
+            ERank academicRank,
+            EEducation education,
+            DateTime? commandDate,
+            EDigitLevel digitLevel,
+            string activated,
+            string workType,
+            string mainSubjectId,
+            string mainSubject)
+        {
+            var raw = string.Join('|', new[]
+            {
+                ktakTeacherId.ToString(),
+                ktakSchoolId.ToString(),
+                place.ToString(),
+                firstName ?? string.Empty,
+                lastName ?? string.Empty,
+                fatherName ?? string.Empty,
+                gender ? "1" : "0",
+                birthday.HasValue ? birthday.Value.ToString("yyyy-MM-dd") : string.Empty,
+                phone ?? string.Empty,
+                address ?? string.Empty,
+                email ?? string.Empty,
+                socNumber ?? string.Empty,
+                experience.ToString(),
+                academicRank.ToString(),
+                education.ToString(),
+                commandDate.HasValue ? commandDate.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : string.Empty,
+                digitLevel.ToString(),
+                activated ?? string.Empty,
+                workType ?? string.Empty,
+                mainSubjectId ?? string.Empty,
+                mainSubject ?? string.Empty
+            });
+
+            using var md5 = MD5.Create();
+            var bytes = Encoding.UTF8.GetBytes(raw);
+            var hash = md5.ComputeHash(bytes);
+            return Convert.ToHexString(hash);
+        }
+
+        // === Helper mappers for enums ===
+        private static bool MapGender(string? sexCode)
+        {
+            // Based on your data: "47" seems to be a code. Adjust based on API docs.
+            // Common pattern: 46=male, 47=female, or 1=male, 0/2=female
+            var v = sexCode?.Trim();
+            // Adjust this mapping - for now treating "46" or "1" as male
+            return !string.IsNullOrWhiteSpace(v) && (v == "1" || v == "46");
+        }
+
+        private static EEducation MapEducation(string? educationCode)
+        {
+            if (string.IsNullOrWhiteSpace(educationCode))
+                return EEducation.Unknown;
+
+            if (int.TryParse(educationCode, out var code))
+            {
+                return code switch
+                {
+                    80 => EEducation.Higher,
+                    81 => EEducation.Incomplete,
+                    82 => EEducation.Professional,
+                    83 => EEducation.Unregistered,
+                    84 => EEducation.Secondary,
+                    _ => EEducation.Unknown
+                };
+            }
+
+            return EEducation.Unknown;
+        }
+
+        private static ERank MapAcademicRank(string? rank, string? rankId)
+        {
+            if (string.IsNullOrWhiteSpace(rank) && string.IsNullOrWhiteSpace(rankId))
+                return ERank.Unknown;
+
+            if (string.IsNullOrWhiteSpace(rank))
+                return ERank.Absence;
+
+            var rankLower = rank.Trim().ToLowerInvariant();
+            return rankLower switch
+            {
+                "դոցենտ" or "docent" => ERank.Docent,
+                "պրոֆեսոր" or "professor" => ERank.Professor,
+                _ => ERank.Unknown
+            };
+        }
+
+        private static EDigitLevel MapDigitLevel(string? digitLevel)
+        {
+            if (string.IsNullOrWhiteSpace(digitLevel))
+                return EDigitLevel.Unknown;
+
+            if (int.TryParse(digitLevel, out var level))
+            {
+                return level switch
+                {
+                    1 => EDigitLevel.C1,
+                    2 => EDigitLevel.C2,
+                    3 => EDigitLevel.C3,
+                    4 => EDigitLevel.C4,
+                    _ => EDigitLevel.Unknown
+                };
+            }
+
+            return EDigitLevel.Unknown;
+        }
+
+        private static EGrade MapGrade(int? grade)
+        {
+            if (grade.HasValue && grade.Value >= 1 && grade.Value <= 12)
+            {
+                return (EGrade)grade.Value;
+            }
+            return 0; // default
+        }
+
+        private static ESubGrade MapSubGrade(string? classifier)
+        {
+            if (string.IsNullOrWhiteSpace(classifier))
+                return ESubGrade.Unknown;
+
+            return classifier.Trim() switch
+            {
+                "ա" => ESubGrade.Sg1,
+                "բ" => ESubGrade.Sg2,
+                "գ" => ESubGrade.Sg3,
+                "դ" => ESubGrade.Sg4,
+                "ե" => ESubGrade.Sg5,
+                "զ" => ESubGrade.Sg6,
+                "է" => ESubGrade.Sg7,
+                "ը" => ESubGrade.Sg8,
+                "թ" => ESubGrade.Sg9,
+                "ժ" => ESubGrade.Sg10,
+                "ի" => ESubGrade.Sg11,
+                "լ" => ESubGrade.Sg12,
+                "խ" => ESubGrade.Sg13,
+                "ծ" => ESubGrade.Sg14,
+                "կ" => ESubGrade.Sg15,
+                "հ" => ESubGrade.Sg16,
+                "ձ" => ESubGrade.Sg17,
+                "ռ" => ESubGrade.Sg18,
+                _ => ESubGrade.Unknown
             };
         }
 
@@ -170,116 +336,294 @@ namespace PordznakanAPI.Controllers
                 var responseText = await client.GetStringAsync(url);
                 var teachersArray = JArray.Parse(responseText);
 
-                var teachersToProcess = new List<Teacher>();
+                // Clear staging table for this sync
+                await _context.TeachersStaging.ExecuteDeleteAsync();
+
+                var now = DateTime.UtcNow;
+                var teachersJsonData = new Dictionary<int, JObject>(); // Store JSON for subjects processing later
+
+                // Process all teachers from API into staging
                 foreach (var teacherToken in teachersArray)
                 {
                     if (teacherToken is not JObject teacherObj)
                         continue;
 
-                    var personId = teacherObj["person_id"]?.ToString();
-                    if (string.IsNullOrWhiteSpace(personId))
+                    var personIdStr = teacherObj["person_id"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(personIdStr) || !int.TryParse(personIdStr, out var ktakTeacherId))
                         continue;
 
-                    var now = DateTime.UtcNow;
-                    DateTime? dateOfBirth = ParseNullableDate(teacherObj["date_of_birth"]?.ToString());
+                    var schoolIdStr = teacherObj["school_id"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(schoolIdStr) || !int.TryParse(schoolIdStr, out var ktakSchoolId))
+                        continue;
+
+                    // Store JSON data for later subject processing
+                    teachersJsonData[ktakTeacherId] = teacherObj;
+
+                    // Parse date of birth
+                    DateOnly? birthday = null;
+                    var dobString = teacherObj["date_of_birth"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(dobString) && DateOnly.TryParse(dobString, out var parsedDate))
+                    {
+                        birthday = parsedDate;
+                    }
+
+                    // Parse command date
                     DateTime? commandDate = ParseNullableDate(teacherObj["command_date"]?.ToString());
 
-                    teachersToProcess.Add(new Teacher
+                    // Parse experience
+                    int experience = 0;
+                    var expStr = teacherObj["exp"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(expStr) && int.TryParse(expStr, out var exp))
+                    {
+                        experience = exp;
+                    }
+
+                    // Map enums
+                    var gender = MapGender(teacherObj["sex"]?.ToString());
+                    var education = MapEducation(teacherObj["education"]?.ToString());
+                    var academicRank = MapAcademicRank(
+                        teacherObj["academic_rank"]?.ToString(),
+                        teacherObj["academic_rank_ID"]?.ToString());
+                    var digitLevel = MapDigitLevel(teacherObj["digit_level"]?.ToString());
+
+                    var firstName = teacherObj["first_name"]?.ToString() ?? string.Empty;
+                    var lastName = teacherObj["last_name"]?.ToString() ?? string.Empty;
+                    var fatherName = teacherObj["father_name"]?.ToString() ?? string.Empty;
+                    var phone = teacherObj["phone"]?.ToString() ?? string.Empty;
+                    var address = teacherObj["address"]?.ToString() ?? string.Empty;
+                    var email = teacherObj["email"]?.ToString() ?? string.Empty;
+                    var socNumber = teacherObj["soc_number"]?.ToString() ?? string.Empty;
+                    var activated = teacherObj["activated"]?.ToString() ?? string.Empty;
+                    var workType = teacherObj["work_type"]?.ToString() ?? string.Empty;
+                    var mainSubjectId = teacherObj["subject_id"]?.ToString() ?? string.Empty;
+                    var mainSubject = teacherObj["main_subject"]?.ToString() ?? string.Empty;
+
+                    // Compute MD5
+                    var md5 = ComputeTeacherMd5(
+                        ktakTeacherId,
+                        ktakSchoolId,
+                        KtakPlace.School,
+                        firstName,
+                        lastName,
+                        fatherName,
+                        gender,
+                        birthday,
+                        phone,
+                        address,
+                        email,
+                        socNumber,
+                        experience,
+                        academicRank,
+                        education,
+                        commandDate,
+                        digitLevel,
+                        activated,
+                        workType,
+                        mainSubjectId,
+                        mainSubject);
+
+                    // Stream directly into staging table
+                    _context.TeachersStaging.Add(new TeacherStaging
                     {
                         Id = Guid.NewGuid(),
-                        PersonId = personId,
-                        SchoolId = teacherObj["school_id"]?.ToString() ?? string.Empty,
-                        SchoolName = teacherObj["school_name"]?.ToString() ?? string.Empty,
-                        Email = teacherObj["email"]?.ToString() ?? string.Empty,
-                        Activated = teacherObj["activated"]?.ToString() ?? string.Empty,
-                        FirstName = teacherObj["first_name"]?.ToString() ?? string.Empty,
-                        LastName = teacherObj["last_name"]?.ToString() ?? string.Empty,
-                        FatherName = teacherObj["father_name"]?.ToString() ?? string.Empty,
-                        Sex = teacherObj["sex"]?.ToString() ?? string.Empty,
-                        WorkType = teacherObj["work_type"]?.ToString() ?? string.Empty,
-                        SocNumber = teacherObj["soc_number"]?.ToString() ?? string.Empty,
-                        DateOfBirth = dateOfBirth,
-                        Address = teacherObj["address"]?.ToString() ?? string.Empty,
-                        Phone = teacherObj["phone"]?.ToString() ?? string.Empty,
-                        Education = teacherObj["education"]?.ToString() ?? string.Empty,
+                        KtakTeacherId = ktakTeacherId,
+                        KtakSchoolId = ktakSchoolId,
+                        Place = KtakPlace.School,
+                        FirstName = firstName,
+                        LastName = lastName,
+                        FatherName = fatherName,
+                        Gender = gender,
+                        Birthday = birthday,
+                        Phone = phone,
+                        Address = address,
+                        Email = email,
+                        SocNumber = socNumber,
+                        Experience = experience,
+                        AcademicRank = academicRank,
+                        Education = education,
                         CommandDate = commandDate,
-                        SubjectId = teacherObj["subject_id"]?.ToString() ?? string.Empty,
-                        MainSubject = teacherObj["main_subject"]?.ToString() ?? string.Empty,
+                        DigitLevel = digitLevel,
+                        Activated = activated,
+                        WorkType = workType,
+                        MainSubjectId = mainSubjectId,
+                        MainSubject = mainSubject,
                         PersonPositions = teacherObj["person_positions"]?.ToString(),
-                        SubjectsJson = teacherObj["subjects"]?.ToString(),
-                        DigitLevel = teacherObj["digit_level"]?.ToString(),
-                        Experience = teacherObj["exp"]?.ToString(),
-                        AcademicRank = teacherObj["academic_rank"]?.ToString(),
-                        AcademicRankId = teacherObj["academic_rank_ID"]?.ToString(),
+                        MD5 = md5,
                         CreatedAt = now,
                         UpdatedAt = now
                     });
                 }
 
-                var personIds = teachersToProcess.Select(t => t.PersonId).Distinct().ToList();
+                // Save all staging data
+                await _context.SaveChangesAsync();
+
+                // Load all staged teachers
+                var stagingRows = await _context.TeachersStaging.ToListAsync();
+
+                // Get existing teachers by KtakTeacherId
+                var stagedIds = stagingRows.Select(s => s.KtakTeacherId).Distinct().ToList();
                 var existingTeachers = await _context.Teachers
-                    .Where(t => personIds.Contains(t.PersonId))
+                    .Include(t => t.Subjects)
+                    .Where(t => stagedIds.Contains(t.KtakTeacherId))
                     .ToListAsync();
-                var existingDict = existingTeachers.ToDictionary(t => t.PersonId);
+
+                var existingDict = existingTeachers.ToDictionary(t => t.KtakTeacherId);
 
                 var newTeachers = new List<Teacher>();
                 var updatedCount = 0;
 
-                foreach (var teacher in teachersToProcess)
+                // Process each staged teacher
+                foreach (var staging in stagingRows)
                 {
-                    if (existingDict.TryGetValue(teacher.PersonId, out var existing))
+                    if (existingDict.TryGetValue(staging.KtakTeacherId, out var existing))
                     {
-                        bool hasChanges = false;
-
-                        hasChanges |= UpdateIfChanged(existing, t => t.SchoolId, (t, v) => t.SchoolId = v, teacher.SchoolId);
-                        hasChanges |= UpdateIfChanged(existing, t => t.SchoolName, (t, v) => t.SchoolName = v, teacher.SchoolName);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Email, (t, v) => t.Email = v, teacher.Email);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Activated, (t, v) => t.Activated = v, teacher.Activated);
-                        hasChanges |= UpdateIfChanged(existing, t => t.FirstName, (t, v) => t.FirstName = v, teacher.FirstName);
-                        hasChanges |= UpdateIfChanged(existing, t => t.LastName, (t, v) => t.LastName = v, teacher.LastName);
-                        hasChanges |= UpdateIfChanged(existing, t => t.FatherName, (t, v) => t.FatherName = v, teacher.FatherName);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Sex, (t, v) => t.Sex = v, teacher.Sex);
-                        hasChanges |= UpdateIfChanged(existing, t => t.WorkType, (t, v) => t.WorkType = v, teacher.WorkType);
-                        hasChanges |= UpdateIfChanged(existing, t => t.SocNumber, (t, v) => t.SocNumber = v, teacher.SocNumber);
-                        hasChanges |= UpdateIfChanged(existing, t => t.DateOfBirth, (t, v) => t.DateOfBirth = v, teacher.DateOfBirth);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Address, (t, v) => t.Address = v, teacher.Address);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Phone, (t, v) => t.Phone = v, teacher.Phone);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Education, (t, v) => t.Education = v, teacher.Education);
-                        hasChanges |= UpdateIfChanged(existing, t => t.CommandDate, (t, v) => t.CommandDate = v, teacher.CommandDate);
-                        hasChanges |= UpdateIfChanged(existing, t => t.SubjectId, (t, v) => t.SubjectId = v, teacher.SubjectId);
-                        hasChanges |= UpdateIfChanged(existing, t => t.MainSubject, (t, v) => t.MainSubject = v, teacher.MainSubject);
-                        hasChanges |= UpdateIfChanged(existing, t => t.PersonPositions, (t, v) => t.PersonPositions = v, teacher.PersonPositions);
-                        hasChanges |= UpdateIfChanged(existing, t => t.SubjectsJson, (t, v) => t.SubjectsJson = v, teacher.SubjectsJson);
-                        hasChanges |= UpdateIfChanged(existing, t => t.DigitLevel, (t, v) => t.DigitLevel = v, teacher.DigitLevel);
-                        hasChanges |= UpdateIfChanged(existing, t => t.Experience, (t, v) => t.Experience = v, teacher.Experience);
-                        hasChanges |= UpdateIfChanged(existing, t => t.AcademicRank, (t, v) => t.AcademicRank = v, teacher.AcademicRank);
-                        hasChanges |= UpdateIfChanged(existing, t => t.AcademicRankId, (t, v) => t.AcademicRankId = v, teacher.AcademicRankId);
-
-                        if (hasChanges)
+                        // Compare MD5
+                        if (!string.Equals(existing.MD5, staging.MD5, StringComparison.OrdinalIgnoreCase))
                         {
+                            // MD5 changed → update from staging
+                            existing.KtakSchoolId = staging.KtakSchoolId;
+                            existing.Place = staging.Place;
+                            existing.FirstName = staging.FirstName;
+                            existing.LastName = staging.LastName;
+                            existing.FatherName = staging.FatherName;
+                            existing.Gender = staging.Gender;
+                            existing.Birthday = staging.Birthday;
+                            existing.Phone = staging.Phone;
+                            existing.Address = staging.Address;
+                            existing.Email = staging.Email;
+                            existing.SocNumber = staging.SocNumber;
+                            existing.Experience = staging.Experience;
+                            existing.AcademicRank = staging.AcademicRank;
+                            existing.Education = staging.Education;
+                            existing.CommandDate = staging.CommandDate;
+                            existing.DigitLevel = staging.DigitLevel;
+                            existing.Activated = staging.Activated;
+                            existing.WorkType = staging.WorkType;
+                            existing.MainSubjectId = staging.MainSubjectId;
+                            existing.MainSubject = staging.MainSubject;
+                            existing.MD5 = staging.MD5;
                             existing.UpdatedAt = DateTime.UtcNow;
+
+                            // Clear existing subjects (will be reloaded below)
+                            _context.TeacherSubjects.RemoveRange(existing.Subjects);
+                            existing.Subjects.Clear();
+
                             updatedCount++;
                             result.TeachersUpdatedList.Add(MapToTeacherDto(existing));
                         }
                     }
                     else
                     {
-                        newTeachers.Add(teacher);
+                        // New teacher
+                        var newTeacher = new Teacher
+                        {
+                            Id = Guid.NewGuid(),
+                            KtakTeacherId = staging.KtakTeacherId,
+                            KtakSchoolId = staging.KtakSchoolId,
+                            Place = staging.Place,
+                            FirstName = staging.FirstName,
+                            LastName = staging.LastName,
+                            FatherName = staging.FatherName,
+                            Gender = staging.Gender,
+                            Birthday = staging.Birthday,
+                            Phone = staging.Phone,
+                            Address = staging.Address,
+                            Email = staging.Email,
+                            SocNumber = staging.SocNumber,
+                            Experience = staging.Experience,
+                            AcademicRank = staging.AcademicRank,
+                            Education = staging.Education,
+                            CommandDate = staging.CommandDate,
+                            DigitLevel = staging.DigitLevel,
+                            Activated = staging.Activated,
+                            WorkType = staging.WorkType,
+                            MainSubjectId = staging.MainSubjectId,
+                            MainSubject = staging.MainSubject,
+                            MD5 = staging.MD5,
+                            CreatedAt = staging.CreatedAt,
+                            UpdatedAt = staging.UpdatedAt
+                        };
+
+                        newTeachers.Add(newTeacher);
                     }
                 }
 
+                _logger?.LogInformation($"[Region {regionId}] Teacher MD5 compare done. New={newTeachers.Count}, Updated={updatedCount}. Saving...");
+
+                // Add new teachers
                 if (newTeachers.Any())
                 {
                     _context.Teachers.AddRange(newTeachers);
                 }
 
+                // Save changes
                 if (updatedCount > 0 || newTeachers.Any())
                 {
                     await _context.SaveChangesAsync();
                 }
 
+                // Process subjects for all teachers (both new and existing)
+                // Reload all teachers to get their IDs
+                var allTeachersDict = (await _context.Teachers.ToListAsync())
+                    .ToDictionary(t => t.KtakTeacherId);
+
+                foreach (var kvp in teachersJsonData)
+                {
+                    var ktakTeacherId = kvp.Key;
+                    var teacherObj = kvp.Value;
+
+                    if (!allTeachersDict.TryGetValue(ktakTeacherId, out var teacher))
+                        continue;
+
+                    // Parse subjects array
+                    var subjectsToken = teacherObj["subjects"];
+                    if (subjectsToken is JArray subjectsArray)
+                    {
+                        // Clear existing subjects for this teacher
+                        var existingSubjects = await _context.TeacherSubjects
+                            .Where(ts => ts.TeacherId == teacher.Id)
+                            .ToListAsync();
+                        _context.TeacherSubjects.RemoveRange(existingSubjects);
+
+                        foreach (var subjectToken in subjectsArray)
+                        {
+                            if (subjectToken is not JObject subjectObj)
+                                continue;
+
+                            var subjectIdToken = subjectObj["subject_id"];
+                            if (subjectIdToken == null || !int.TryParse(subjectIdToken.ToString(), out var subjectId))
+                                continue;
+
+                            var gradeToken = subjectObj["grade"];
+                            var grade = gradeToken != null && int.TryParse(gradeToken.ToString(), out var g) 
+                                ? MapGrade(g) 
+                                : (EGrade)0;
+
+                            var subGrade = MapSubGrade(subjectObj["classifier"]?.ToString());
+                            var subjectTitle = subjectObj["subject_title"]?.ToString() ?? string.Empty;
+
+                            _context.TeacherSubjects.Add(new TeacherSubject
+                            {
+                                Id = Guid.NewGuid(),
+                                TeacherId = teacher.Id,
+                                SubjectId = subjectId,
+                                Grade = grade,
+                                SubGrade = subGrade,
+                                Name = subjectTitle,
+                                ClassroomId = subjectObj["classroom_id"]?.ToString() ?? string.Empty
+                            });
+                        }
+                    }
+                }
+
+                // Save subjects
+                await _context.SaveChangesAsync();
+
+                // Cleanup staging
+                await _context.TeachersStaging.ExecuteDeleteAsync();
+
                 result.Success = true;
-                result.TeachersProcessed = teachersToProcess.Count;
+                result.TeachersProcessed = stagingRows.Count;
                 result.TeachersAdded = newTeachers.Count;
                 result.TeachersUpdated = updatedCount;
 
@@ -289,8 +633,22 @@ namespace PordznakanAPI.Controllers
             {
                 result.Success = false;
                 result.ErrorMessage = ex.Message;
+                _logger?.LogError(ex, $"Error syncing teachers for region {regionId}");
                 return result;
             }
+        }
+
+        private static DateTime? ParseNullableDate(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            if (DateTime.TryParse(value, out var parsed))
+            {
+                return parsed;
+            }
+
+            return null;
         }
 
         [HttpPost("sync/{regionId?}")]
@@ -374,57 +732,5 @@ namespace PordznakanAPI.Controllers
                 return StatusCode(500, new { error = "Failed to load teacher changes", message = ex.Message });
             }
         }
-
-        private static bool UpdateIfChanged<T>(
-            Teacher target,
-            Func<Teacher, T> getter,
-            Action<Teacher, T> setter,
-            T newValue)
-        {
-            var currentValue = getter(target);
-            if (EqualityComparer<T>.Default.Equals(currentValue, newValue))
-            {
-                return false;
-            }
-
-            setter(target, newValue);
-            return true;
-        }
-
-        private static bool UpdateIfChanged(
-            Teacher target,
-            Func<Teacher, DateTime?> getter,
-            Action<Teacher, DateTime?> setter,
-            DateTime? newValue)
-        {
-            var currentValue = getter(target);
-
-            if (currentValue.HasValue && newValue.HasValue && currentValue.Value == newValue.Value)
-            {
-                return false;
-            }
-
-            if (!currentValue.HasValue && !newValue.HasValue)
-            {
-                return false;
-            }
-
-            setter(target, newValue);
-            return true;
-        }
-
-        private static DateTime? ParseNullableDate(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return null;
-
-            if (DateTime.TryParse(value, out var parsed))
-            {
-                return parsed;
-            }
-
-            return null;
-        }
     }
 }
-

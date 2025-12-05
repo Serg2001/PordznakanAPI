@@ -12,16 +12,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
-
-// Configure OpenAPI (Swagger) for development
 builder.Services.AddOpenApi();
 
-// Configure DbContext with SQL Server (60 second command timeout)
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.CommandTimeout(200) // 60 seconds timeout
+        sqlOptions => sqlOptions.CommandTimeout(200)
     );
 });
 
@@ -39,7 +36,6 @@ builder.Services.AddHangfire(configuration => configuration
         DisableGlobalLocks = true
     }));
 
-// Add Hangfire server
 builder.Services.AddHangfireServer();
 
 builder.Services.AddHttpClient("ktakapi", httpClient =>
@@ -54,11 +50,6 @@ builder.Services.AddHttpClient("ktakapi", httpClient =>
     };
 });
 
-// Register SchoolService as scoped
-//builder.Services.AddScoped<SchoolService>();
-
-
-// Add logging
 builder.Services.AddLogging(logging =>
 {
     logging.AddConsole();
@@ -67,58 +58,62 @@ builder.Services.AddLogging(logging =>
 
 var app = builder.Build();
 
+// === Apply database migrations on startup ===
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        // This will apply any pending migrations and create Hangfire tables if needed
+        await dbContext.Database.MigrateAsync();
+        app.Logger.LogInformation("Database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "An error occurred while applying database migrations.");
+        // Optional: throw; // if you want the app to crash on migration failure
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi(); // Enable OpenAPI in development
+    app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
-// Configure Hangfire Dashboard (optional - useful for monitoring jobs)
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
-    Authorization = new[] { new HangfireAuthorizationFilter() } // Allow all in development
+    Authorization = new[] { new HangfireAuthorizationFilter() }
 });
 
-// Schedule the recurring job to sync all regions at 00:01 daily
-// Note: Cron expression "1 0 * * *" means 00:01 in the specified timezone
-// For Armenia (UTC+4), if you want 00:01 local time, use "1 0 * * *" with Armenia timezone
-// Or use UTC: "1 20 * * *" (20:01 UTC = 00:01 next day in Armenia)
+// Schedule recurring job with proper timezone handling
 try
 {
-    // Try to use Armenia timezone, fallback to UTC if not found
-    var timezone = TimeZoneInfo.FindSystemTimeZoneById("Caucasus Standard Time");
+    var timezone = TimeZoneInfo.FindSystemTimeZoneById("Caucasus Standard Time"); // Armenia Standard Time
     RecurringJob.AddOrUpdate<PupilController>(
         "sync-all-regions-daily",
         controller => controller.SyncAllRegions(),
-        "1 00 * * *", // Cron expression: At 00:01 every day
-        timezone);
+        "1 0 * * *", // 00:01 Armenia time
+        new RecurringJobOptions { TimeZone = timezone });
 }
 catch (TimeZoneNotFoundException)
 {
-    // Fallback to UTC (20:01 UTC = 00:01 next day in Armenia UTC+4)
-    // You can adjust this to your preferred timezone
+    app.Logger.LogWarning("Caucasus Standard Time not found, falling back to UTC.");
     RecurringJob.AddOrUpdate<PupilController>(
         "sync-all-regions-daily",
         controller => controller.SyncAllRegions(),
-        "1 00 * * *", // 20:01 UTC = 00:01 next day in Armenia
+        "1 20 * * *", // 20:01 UTC = 00:01 Armenia time (UTC+4)
         TimeZoneInfo.Utc);
 }
 
 app.Run();
 
-// Simple authorization filter for Hangfire Dashboard (allow all for now)
+// Simple authorization filter for Hangfire Dashboard
 public class HangfireAuthorizationFilter : IDashboardAuthorizationFilter
 {
-    public bool Authorize(DashboardContext context)
-    {
-        // In production, you should implement proper authorization
-        // For now, allowing all requests
-        return true;
-    }
+    public bool Authorize(DashboardContext context) => true; // Allow all (secure this in production!)
 }
