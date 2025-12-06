@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PordznakanAPI.Data;
 
@@ -11,9 +12,11 @@ using PordznakanAPI.Data;
 namespace PordznakanAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251206205115_TeacherSubjectsNew")]
+    partial class TeacherSubjectsNew
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -471,6 +474,9 @@ namespace PordznakanAPI.Migrations
                     b.Property<int>("Grade")
                         .HasColumnType("int");
 
+                    b.Property<int>("KtakTeacherId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -481,10 +487,12 @@ namespace PordznakanAPI.Migrations
                     b.Property<int>("SubjectId")
                         .HasColumnType("int");
 
-                    b.Property<Guid>("TeacherId")
+                    b.Property<Guid?>("TeacherId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("KtakTeacherId");
 
                     b.HasIndex("TeacherId");
 
@@ -563,13 +571,9 @@ namespace PordznakanAPI.Migrations
 
             modelBuilder.Entity("PordznakanAPI.Models.TeacherSubject", b =>
                 {
-                    b.HasOne("PordznakanAPI.Models.Teacher", "Teacher")
+                    b.HasOne("PordznakanAPI.Models.Teacher", null)
                         .WithMany("Subjects")
-                        .HasForeignKey("TeacherId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Teacher");
+                        .HasForeignKey("TeacherId");
                 });
 
             modelBuilder.Entity("School", b =>
