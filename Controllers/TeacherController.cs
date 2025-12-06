@@ -238,46 +238,81 @@ namespace PordznakanAPI.Controllers
             };
         }
 
+        /// <summary>
+        /// Syncs all 10 regions. This method is designed to be called by Hangfire.
+        /// </summary>
         public async Task SyncAllRegions()
         {
-            var regionIds = Enumerable.Range(1, 10).ToArray();
+            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
             var results = new List<TeacherSyncResult>();
+            var syncStartTime = DateTime.UtcNow;
+
+            _logger?.LogInformation($"Starting teacher sync for all {regionIds.Length} regions at {syncStartTime}");
 
             foreach (var regionId in regionIds)
             {
                 try
                 {
+                    _logger?.LogInformation($"Syncing teachers for region {regionId}...");
                     var result = await SyncRegionInternal(regionId);
                     results.Add(result);
+                    
+                    if (result.Success)
+                    {
+                        _logger?.LogInformation($"Region {regionId} teacher sync completed successfully. " +
+                            $"Teachers: {result.TeachersAdded} added, {result.TeachersUpdated} updated.");
+                    }
+                    else
+                    {
+                        _logger?.LogError($"Region {regionId} teacher sync failed: {result.ErrorMessage}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, $"Teacher sync failed for region {regionId}");
+                    _logger?.LogError(ex, $"Exception while syncing teachers for region {regionId}");
                     results.Add(new TeacherSyncResult
                     {
-                        RegionId = regionId,
                         Success = false,
-                        ErrorMessage = ex.Message
+                        ErrorMessage = ex.Message,
+                        RegionId = regionId
                     });
                 }
             }
 
+            var syncEndTime = DateTime.UtcNow;
+            var successCount = results.Count(r => r.Success);
+            var failedCount = results.Count(r => !r.Success);
+
+            // Create summary of all changes
             var summary = new TeacherSyncSummaryDto
             {
-                SyncCompletedAt = DateTime.UtcNow,
+                SyncCompletedAt = syncEndTime,
                 TotalRegionsProcessed = regionIds.Length,
-                SuccessfulRegions = results.Count(r => r.Success),
-                FailedRegions = results.Count(r => !r.Success),
+                SuccessfulRegions = successCount,
+                FailedRegions = failedCount,
                 TotalTeachersAdded = results.Sum(r => r.TeachersAdded),
                 TotalTeachersUpdated = results.Sum(r => r.TeachersUpdated)
             };
 
+            // Aggregate all changed entities
             foreach (var result in results.Where(r => r.Success))
             {
                 summary.AllTeachersUpdated.AddRange(result.TeachersUpdatedList);
             }
 
+            // Generate and save JSON file
             await SaveChangesToJsonFile(summary);
+
+            _logger?.LogInformation($"Teacher sync completed for all regions. " +
+                $"Success: {successCount}/{regionIds.Length}. " +
+                $"Total - Teachers: {summary.TotalTeachersAdded} added, {summary.TotalTeachersUpdated} updated. " +
+                $"Changes saved to JSON file.");
+
+            // Send updated teachers to external API
+            if (summary.AllTeachersUpdated.Any())
+            {
+                await SendUpdatedTeachersToApi(summary.AllTeachersUpdated);
+            }
         }
 
         public TeacherChangedEntitiesDto GetChangedTeachers(List<TeacherSyncResult> results)
@@ -619,13 +654,28 @@ namespace PordznakanAPI.Controllers
                 // Save subjects
                 await _context.SaveChangesAsync();
 
+                // Add newly added teachers to the updated list (reload with subjects)
+                if (newTeachers.Any())
+                {
+                    var newTeacherIds = newTeachers.Select(t => t.Id).ToList();
+                    var reloadedNewTeachers = await _context.Teachers
+                        .Include(t => t.Subjects)
+                        .Where(t => newTeacherIds.Contains(t.Id))
+                        .ToListAsync();
+
+                    foreach (var newTeacher in reloadedNewTeachers)
+                    {
+                        result.TeachersUpdatedList.Add(MapToTeacherDto(newTeacher));
+                    }
+                }
+
                 // Cleanup staging
                 await _context.TeachersStaging.ExecuteDeleteAsync();
 
                 result.Success = true;
                 result.TeachersProcessed = stagingRows.Count;
                 result.TeachersAdded = newTeachers.Count;
-                result.TeachersUpdated = updatedCount;
+                result.TeachersUpdated = updatedCount + newTeachers.Count; // Include newly added as updated
 
                 return result;
             }
@@ -649,6 +699,52 @@ namespace PordznakanAPI.Controllers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Sends updated teachers to the external API endpoint
+        /// </summary>
+        private async Task SendUpdatedTeachersToApi(List<TeacherDto> updatedTeachers)
+        {
+            try
+            {
+                _logger?.LogInformation($"Sending {updatedTeachers.Count} updated teachers to external API...");
+
+                var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new HttpClient(handler);
+                client.Timeout = TimeSpan.FromMinutes(5);
+
+                var json = JsonConvert.SerializeObject(updatedTeachers, new JsonSerializerSettings
+                {
+                    NullValueHandling = NullValueHandling.Ignore,
+                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ"
+                });
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync(
+                    "https://crm.dshh.am:1400/api/bulk-update/teachers",
+                    content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogInformation($"Successfully sent {updatedTeachers.Count} teachers to external API. Response: {responseContent}");
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"Failed to send teachers to external API. Status: {response.StatusCode}, Response: {errorContent}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Exception while sending updated teachers to external API");
+            }
         }
 
         [HttpPost("sync/{regionId?}")]

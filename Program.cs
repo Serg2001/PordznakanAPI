@@ -99,12 +99,24 @@ try
         controller => controller.SyncAllRegions(),
         "1 0 * * *", // 00:01 Armenia time
         new RecurringJobOptions { TimeZone = timezone });
+    
+    RecurringJob.AddOrUpdate<TeacherController>(
+        "sync-teachers-all-regions-daily",
+        controller => controller.SyncAllRegions(),
+        "1 0 * * *", // 00:01 Armenia time
+        new RecurringJobOptions { TimeZone = timezone });
 }
 catch (TimeZoneNotFoundException)
 {
     app.Logger.LogWarning("Caucasus Standard Time not found, falling back to UTC.");
     RecurringJob.AddOrUpdate<PupilController>(
         "sync-all-regions-daily",
+        controller => controller.SyncAllRegions(),
+        "1 20 * * *", // 20:01 UTC = 00:01 Armenia time (UTC+4)
+        TimeZoneInfo.Utc);
+    
+    RecurringJob.AddOrUpdate<TeacherController>(
+        "sync-teachers-all-regions-daily",
         controller => controller.SyncAllRegions(),
         "1 20 * * *", // 20:01 UTC = 00:01 Armenia time (UTC+4)
         TimeZoneInfo.Utc);
