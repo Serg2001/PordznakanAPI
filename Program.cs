@@ -91,7 +91,7 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 });
 
 // Schedule recurring job with proper timezone handling
-/*try
+try
 {
     var timezone = TimeZoneInfo.FindSystemTimeZoneById("Caucasus Standard Time"); // Armenia Standard Time
     RecurringJob.AddOrUpdate<PupilController>(
@@ -99,7 +99,7 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
         controller => controller.SyncAllRegions(),
         "1 15 * * *", // 00:01 Armenia time
         new RecurringJobOptions { TimeZone = timezone });
-    
+
     RecurringJob.AddOrUpdate<TeacherController>(
         "sync-teachers-all-regions-daily",
         controller => controller.SyncAllRegions(),
@@ -114,13 +114,13 @@ catch (TimeZoneNotFoundException)
         controller => controller.SyncAllRegions(),
         "1 20 * * *", // 20:01 UTC = 00:01 Armenia time (UTC+4)
         TimeZoneInfo.Utc);
-    
+
     RecurringJob.AddOrUpdate<TeacherController>(
         "sync-teachers-all-regions-daily",
         controller => controller.SyncAllRegions(),
         "1 20 * * *", // 20:01 UTC = 00:01 Armenia time (UTC+4)
         TimeZoneInfo.Utc);
-}*/
+}
 
 app.Run();
 

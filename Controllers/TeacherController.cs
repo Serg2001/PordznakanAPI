@@ -237,7 +237,7 @@ namespace PordznakanAPI.Controllers
         /// </summary>
         public async Task SyncAllRegions()
         {
-            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+            var regionIds = new[] { 1,  7, };
             var results = new List<TeacherSyncResult>();
             var syncStartTime = DateTime.UtcNow;
 
@@ -1071,7 +1071,7 @@ namespace PordznakanAPI.Controllers
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await client.PostAsync(
-                    "https://crm.dshh.am:1400/api/bulk-update/teachers",
+                    "https://localhost:2222/api/bulk-update/teachers",
                     content);
 
                 if (response.IsSuccessStatusCode)
