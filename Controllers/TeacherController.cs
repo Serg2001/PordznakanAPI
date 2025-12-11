@@ -132,8 +132,8 @@ namespace PordznakanAPI.Controllers
             // Based on your data: "47" seems to be a code. Adjust based on API docs.
             // Common pattern: 46=male, 47=female, or 1=male, 0/2=female
             var v = sexCode?.Trim();
-            // Adjust this mapping - for now treating "46" or "1" as male
-            return !string.IsNullOrWhiteSpace(v) && (v == "1" || v == "46");
+            // Adjust this mapping - for now treating "48" or "1" as male
+            return !string.IsNullOrWhiteSpace(v) && (v == "1" || v == "48");
         }
 
         private static EEducation MapEducation(string? educationCode)
@@ -1049,7 +1049,16 @@ namespace PordznakanAPI.Controllers
             try
             {
                 var totalSubjects = updatedTeachers.Sum(t => t.Subjects?.Count ?? 0);
-                _logger?.LogInformation($"Sending {updatedTeachers.Count} updated teachers to external API (with {totalSubjects} total subjects)...");
+                var teachersWithSubjects = updatedTeachers.Count(t => t.Subjects != null && t.Subjects.Any());
+                
+                _logger?.LogInformation($"Sending {updatedTeachers.Count} updated teachers to external API (with {totalSubjects} total subjects across {teachersWithSubjects} teachers)...");
+                
+                // Log sample to verify subjects are included
+                var sampleTeacher = updatedTeachers.FirstOrDefault(t => t.Subjects != null && t.Subjects.Any());
+                if (sampleTeacher != null)
+                {
+                    _logger?.LogInformation($"Sample teacher {sampleTeacher.KtakTeacherId} has {sampleTeacher.Subjects.Count} subjects: {string.Join(", ", sampleTeacher.Subjects.Select(s => $"{s.Name}({s.SubjectId})"))}");
+                }
 
                 var handler = new HttpClientHandler
                 {
@@ -1060,13 +1069,27 @@ namespace PordznakanAPI.Controllers
                 client.Timeout = TimeSpan.FromMinutes(5);
 
                 // Serialize teachers with all properties including Subjects
-                // Note: ReferenceLoopHandling.Ignore prevents circular reference issues (TeacherDto -> TeacherSubjectDto -> TeacherDto)
+                // Note: TeacherDto navigation property in TeacherSubjectDto is marked with [JsonIgnore] to prevent circular references
                 var json = JsonConvert.SerializeObject(updatedTeachers, new JsonSerializerSettings
                 {
                     NullValueHandling = NullValueHandling.Ignore,
                     DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ",
                     ReferenceLoopHandling = ReferenceLoopHandling.Ignore
                 });
+                
+                // Log JSON size and verify subjects are in the JSON
+                var jsonLength = json.Length;
+                _logger?.LogInformation($"Serialized JSON length: {jsonLength} bytes. Checking if subjects are included...");
+                
+                // Verify subjects are in the JSON by checking for subject properties
+                if (json.Contains("\"SubjectId\"") && json.Contains("\"Name\""))
+                {
+                    _logger?.LogInformation("✅ Verified: Subjects are included in the JSON (found SubjectId and Name properties)");
+                }
+                else
+                {
+                    _logger?.LogWarning("⚠️ Warning: Subjects may not be included in the JSON (SubjectId or Name properties not found)");
+                }
 
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 

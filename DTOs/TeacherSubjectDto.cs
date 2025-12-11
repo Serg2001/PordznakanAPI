@@ -1,4 +1,5 @@
 using PordznakanAPI.Enums;
+using Newtonsoft.Json;
 
 namespace PordznakanAPI.DTOs
 {
@@ -9,6 +10,7 @@ namespace PordznakanAPI.DTOs
  /// </summary>
  public Guid Id { get; set; }
  public Guid TeacherDtoId { get; set; }   // FK
+ [JsonIgnore] // Ignore navigation property to prevent circular reference in JSON serialization
  public TeacherDto TeacherDto { get; set; } = null!;
  /// <summary>
  /// Առարկայի ID Ktak-ից
