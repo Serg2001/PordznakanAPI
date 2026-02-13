@@ -19,6 +19,20 @@ namespace PordznakanAPI.Data
         public DbSet<Teacher> Teachers { get; set; }
         public DbSet<TeacherStaging> TeachersStaging { get; set; }
         public DbSet<TeacherSubject> TeacherSubjects { get; set; }
+        public DbSet<MmuhStudent> MmuhStudents { get; set; }
+        public DbSet<MmuhStudentStaging> MmuhStudentsStaging { get; set; }
+        public DbSet<MmuhStaff> MmuhStaff { get; set; }
+        public DbSet<MmuhStaffStaging> MmuhStaffStaging { get; set; }
+        public DbSet<NmuhStudent> NmuhStudents { get; set; }
+        public DbSet<NmuhStudentStaging> NmuhStudentsStaging { get; set; }
+        public DbSet<NmuhStaff> NmuhStaff { get; set; }
+        public DbSet<NmuhStaffStaging> NmuhStaffStaging { get; set; }
+        public DbSet<LogEmployee> LogEmployees { get; set; }
+        public DbSet<LogStudent> LogStudents { get; set; }
+        public DbSet<LogMmuhEmployee> LogMmuhEmployees { get; set; }
+        public DbSet<LogMmuhStudent> LogMmuhStudents { get; set; }
+        public DbSet<LogNmuhStudent> LogNmuhStudents { get; set; }
+        public DbSet<LogNmuhEmployee> LogNmuhEmployees { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -96,6 +110,134 @@ namespace PordznakanAPI.Data
                 .WithMany(t => t.Subjects)
                 .HasForeignKey(ts => ts.TeacherId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Configure MmuhStudent entity
+            modelBuilder.Entity<MmuhStudent>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<MmuhStudent>()
+                .HasIndex(m => m.MmuhStudentId);
+
+            modelBuilder.Entity<MmuhStudent>()
+                .HasIndex(m => m.MmuhSchoolId);
+
+            // Configure MmuhStudent staging entity (same schema, different table)
+            modelBuilder.Entity<MmuhStudentStaging>()
+                .ToTable("MmuhStudentsStaging");
+
+            modelBuilder.Entity<MmuhStudentStaging>()
+                .HasKey(m => m.Id);
+
+            // Configure MmuhStaff entity
+            modelBuilder.Entity<MmuhStaff>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<MmuhStaff>()
+                .HasIndex(m => m.MmuhStaffId);
+
+            modelBuilder.Entity<MmuhStaff>()
+                .HasIndex(m => m.InstId);
+
+            // Configure MmuhStaff staging entity (same schema, different table)
+            modelBuilder.Entity<MmuhStaffStaging>()
+                .ToTable("MmuhStaffStaging");
+
+            modelBuilder.Entity<MmuhStaffStaging>()
+                .HasKey(m => m.Id);
+
+            // Configure NmuhStudent entity
+            modelBuilder.Entity<NmuhStudent>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<NmuhStudent>()
+                .HasIndex(m => m.NmuhStudentId);
+
+            modelBuilder.Entity<NmuhStudent>()
+                .HasIndex(m => m.NmuhSchoolId);
+
+            // Configure NmuhStudent staging entity (same schema, different table)
+            modelBuilder.Entity<NmuhStudentStaging>()
+                .ToTable("NmuhStudentsStaging");
+
+            modelBuilder.Entity<NmuhStudentStaging>()
+                .HasKey(m => m.Id);
+
+            // Configure NmuhStaff entity
+            modelBuilder.Entity<NmuhStaff>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<NmuhStaff>()
+                .HasIndex(m => m.NmuhStaffId);
+
+            modelBuilder.Entity<NmuhStaff>()
+                .HasIndex(m => m.InstId);
+
+            // Configure NmuhStaff staging entity (same schema, different table)
+            modelBuilder.Entity<NmuhStaffStaging>()
+                .ToTable("NmuhStaffStaging");
+
+            modelBuilder.Entity<NmuhStaffStaging>()
+                .HasKey(m => m.Id);
+
+            // Configure LogEmployee entity
+            modelBuilder.Entity<LogEmployee>()
+                .HasKey(l => l.Id);
+
+            modelBuilder.Entity<LogEmployee>()
+                .HasIndex(l => l.LogId);
+
+            modelBuilder.Entity<LogEmployee>()
+                .HasIndex(l => l.SchoolId);
+
+            // Configure LogStudent entity
+            modelBuilder.Entity<LogStudent>()
+                .HasKey(l => l.Id);
+
+            modelBuilder.Entity<LogStudent>()
+                .HasIndex(l => l.LogId);
+
+            modelBuilder.Entity<LogStudent>()
+                .HasIndex(l => l.SchoolId);
+
+            // Configure LogMmuhEmployee entity
+            modelBuilder.Entity<LogMmuhEmployee>()
+                .HasKey(l => l.Id);
+
+            modelBuilder.Entity<LogMmuhEmployee>()
+                .HasIndex(l => l.LogId);
+
+            modelBuilder.Entity<LogMmuhEmployee>()
+                .HasIndex(l => l.SchoolId);
+
+            // Configure LogMmuhStudent entity
+            modelBuilder.Entity<LogMmuhStudent>()
+                .HasKey(l => l.Id);
+
+            modelBuilder.Entity<LogMmuhStudent>()
+                .HasIndex(l => l.LogId);
+
+            modelBuilder.Entity<LogMmuhStudent>()
+                .HasIndex(l => l.SchoolId);
+
+            // Configure LogNmuhStudent entity
+            modelBuilder.Entity<LogNmuhStudent>()
+                .HasKey(l => l.Id);
+
+            modelBuilder.Entity<LogNmuhStudent>()
+                .HasIndex(l => l.LogId);
+
+            modelBuilder.Entity<LogNmuhStudent>()
+                .HasIndex(l => l.SchoolId);
+
+            // Configure LogNmuhEmployee entity
+            modelBuilder.Entity<LogNmuhEmployee>()
+                .HasKey(l => l.Id);
+
+            modelBuilder.Entity<LogNmuhEmployee>()
+                .HasIndex(l => l.LogId);
+
+            modelBuilder.Entity<LogNmuhEmployee>()
+                .HasIndex(l => l.SchoolId);
         }
     }
 }
