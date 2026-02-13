@@ -67,13 +67,7 @@ namespace PordznakanAPI.Controllers
                 WorkType = teacher.WorkType,
                 CreatedAt = teacher.CreatedAt,
                 UpdatedAt = teacher.UpdatedAt,
-                Subjects = teacher.Subjects.Select(s => new TeacherSubjectDto
-                {
-                    SubjectId = s.SubjectId,
-                    Grade = s.Grade,
-                    SubGrade = s.SubGrade,
-                    Name = s.Name
-                }).ToList()
+                Subjects = new List<TeacherSubjectDto>() // Will be populated separately
             };
         }
 
@@ -138,8 +132,8 @@ namespace PordznakanAPI.Controllers
             // Based on your data: "47" seems to be a code. Adjust based on API docs.
             // Common pattern: 46=male, 47=female, or 1=male, 0/2=female
             var v = sexCode?.Trim();
-            // Adjust this mapping - for now treating "46" or "1" as male
-            return !string.IsNullOrWhiteSpace(v) && (v == "1" || v == "46");
+            // Adjust this mapping - for now treating "48" or "1" as male
+            return !string.IsNullOrWhiteSpace(v) && (v == "1" || v == "48");
         }
 
         private static EEducation MapEducation(string? educationCode)
@@ -238,46 +232,81 @@ namespace PordznakanAPI.Controllers
             };
         }
 
+        /// <summary>
+        /// Syncs all 10 regions. This method is designed to be called by Hangfire.
+        /// </summary>
         public async Task SyncAllRegions()
         {
-            var regionIds = Enumerable.Range(1, 10).ToArray();
+            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
             var results = new List<TeacherSyncResult>();
+            var syncStartTime = DateTime.UtcNow;
+
+            _logger?.LogInformation($"Starting teacher sync for all {regionIds.Length} regions at {syncStartTime}");
 
             foreach (var regionId in regionIds)
             {
                 try
                 {
+                    _logger?.LogInformation($"Syncing teachers for region {regionId}...");
                     var result = await SyncRegionInternal(regionId);
                     results.Add(result);
+                    
+                    if (result.Success)
+                    {
+                        _logger?.LogInformation($"Region {regionId} teacher sync completed successfully. " +
+                            $"Teachers: {result.TeachersAdded} added, {result.TeachersUpdated} updated.");
+                    }
+                    else
+                    {
+                        _logger?.LogError($"Region {regionId} teacher sync failed: {result.ErrorMessage}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, $"Teacher sync failed for region {regionId}");
+                    _logger?.LogError(ex, $"Exception while syncing teachers for region {regionId}");
                     results.Add(new TeacherSyncResult
                     {
-                        RegionId = regionId,
                         Success = false,
-                        ErrorMessage = ex.Message
+                        ErrorMessage = ex.Message,
+                        RegionId = regionId
                     });
                 }
             }
 
+            var syncEndTime = DateTime.UtcNow;
+            var successCount = results.Count(r => r.Success);
+            var failedCount = results.Count(r => !r.Success);
+
+            // Create summary of all changes
             var summary = new TeacherSyncSummaryDto
             {
-                SyncCompletedAt = DateTime.UtcNow,
+                SyncCompletedAt = syncEndTime,
                 TotalRegionsProcessed = regionIds.Length,
-                SuccessfulRegions = results.Count(r => r.Success),
-                FailedRegions = results.Count(r => !r.Success),
+                SuccessfulRegions = successCount,
+                FailedRegions = failedCount,
                 TotalTeachersAdded = results.Sum(r => r.TeachersAdded),
                 TotalTeachersUpdated = results.Sum(r => r.TeachersUpdated)
             };
 
+            // Aggregate all changed entities
             foreach (var result in results.Where(r => r.Success))
             {
                 summary.AllTeachersUpdated.AddRange(result.TeachersUpdatedList);
             }
 
+            // Generate and save JSON file
             await SaveChangesToJsonFile(summary);
+
+            _logger?.LogInformation($"Teacher sync completed for all regions. " +
+                $"Success: {successCount}/{regionIds.Length}. " +
+                $"Total - Teachers: {summary.TotalTeachersAdded} added, {summary.TotalTeachersUpdated} updated. " +
+                $"Changes saved to JSON file.");
+
+            // Send updated teachers to external API
+            if (summary.AllTeachersUpdated.Any())
+            {
+                await SendUpdatedTeachersToApi(summary.AllTeachersUpdated);
+            }
         }
 
         public TeacherChangedEntitiesDto GetChangedTeachers(List<TeacherSyncResult> results)
@@ -332,9 +361,115 @@ namespace PordznakanAPI.Controllers
             try
             {
                 using var client = new HttpClient();
-                var url = $"https://api.emis.am/v1/get_personnel/{regionId}";
+                var url = $"https://crmapi.dshh.am/api/Integration/SendRequest?myUrl=v1/get_personnel/{regionId}";
+                _logger?.LogInformation($"[Region {regionId}] Fetching teachers from: {url}");
+                
                 var responseText = await client.GetStringAsync(url);
-                var teachersArray = JArray.Parse(responseText);
+                _logger?.LogDebug($"[Region {regionId}] API response length: {responseText?.Length ?? 0} characters");
+                
+                // Parse the response - it might be an array or an object containing an array
+                JArray? teachersArray = null;
+                JToken token;
+                
+                try
+                {
+                    token = JToken.Parse(responseText);
+                }
+                catch (Exception parseEx)
+                {
+                    var preview = responseText?.Length > 500 ? responseText.Substring(0, 500) : responseText;
+                    throw new Exception($"Failed to parse JSON response. Response preview: {preview}. Error: {parseEx.Message}", parseEx);
+                }
+                
+                if (token.Type == JTokenType.Array)
+                {
+                    // Response is directly an array
+                    teachersArray = token as JArray;
+                    _logger?.LogInformation($"[Region {regionId}] Response is a direct array with {teachersArray?.Count ?? 0} items");
+                }
+                else if (token.Type == JTokenType.Object)
+                {
+                    // Response is an object - try to find an array property
+                    var obj = token as JObject;
+                    if (obj != null)
+                    {
+                        _logger?.LogInformation($"[Region {regionId}] Response is an object. Properties: {string.Join(", ", obj.Properties().Select(p => p.Name))}");
+                        
+                        // Try common property names that might contain the array
+                        teachersArray = obj["data"] as JArray 
+                                     ?? obj["teachers"] as JArray 
+                                     ?? obj["results"] as JArray 
+                                     ?? obj["items"] as JArray;
+                        
+                        if (teachersArray == null)
+                        {
+                            // Check if there's an error message
+                            var errorMessage = obj["error"]?.ToString() 
+                                            ?? obj["message"]?.ToString()
+                                            ?? obj["ErrorMessage"]?.ToString();
+                            
+                            if (!string.IsNullOrWhiteSpace(errorMessage))
+                            {
+                                throw new Exception($"API returned an error: {errorMessage}");
+                            }
+                            
+                            // Try to find any array property
+                            foreach (var prop in obj.Properties())
+                            {
+                                if (prop.Value.Type == JTokenType.Array)
+                                {
+                                    teachersArray = prop.Value as JArray;
+                                    _logger?.LogWarning($"[Region {regionId}] Found teachers array in property '{prop.Name}' with {teachersArray.Count} items");
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _logger?.LogInformation($"[Region {regionId}] Found teachers array in common property with {teachersArray.Count} items");
+                        }
+                    }
+                }
+                
+                if (teachersArray == null)
+                {
+                    // Last attempt: check if the response is a single teacher object
+                    if (token.Type == JTokenType.Object)
+                    {
+                        var obj = token as JObject;
+                        if (obj != null && obj["person_id"] != null)
+                        {
+                            // It's a single teacher object - wrap it in an array
+                            teachersArray = new JArray { obj };
+                            _logger?.LogInformation($"[Region {regionId}] Response is a single teacher object, wrapping in array");
+                        }
+                    }
+                    
+                    if (teachersArray == null)
+                    {
+                        var preview = responseText?.Length > 1000 ? responseText.Substring(0, 1000) : responseText;
+                        throw new Exception($"Unable to parse teachers array from API response. Response type: {token.Type}. Response preview: {preview}");
+                    }
+                }
+                
+                _logger?.LogInformation($"[Region {regionId}] Successfully parsed {teachersArray.Count} teachers from API response");
+
+                // Log sample teacher structure to debug
+                if (teachersArray.Count > 0 && teachersArray[0] is JObject firstTeacher)
+                {
+                    var sampleFields = string.Join(", ", firstTeacher.Properties().Select(p => p.Name));
+                    _logger?.LogInformation($"[Region {regionId}] Sample teacher fields: {sampleFields}");
+                    
+                    if (firstTeacher["subjects"] != null)
+                    {
+                        var subjectsValue = firstTeacher["subjects"];
+                        _logger?.LogInformation($"[Region {regionId}] Sample teacher 'subjects' field type: {subjectsValue?.Type}, Value: {subjectsValue?.ToString(Formatting.None)?.Substring(0, Math.Min(200, subjectsValue?.ToString(Formatting.None)?.Length ?? 0))}");
+                    }
+                    else
+                    {
+                        _logger?.LogWarning($"[Region {regionId}] ⚠️ Sample teacher does NOT have 'subjects' field!");
+                    }
+                }
 
                 // Clear staging table for this sync
                 await _context.TeachersStaging.ExecuteDeleteAsync();
@@ -460,10 +595,14 @@ namespace PordznakanAPI.Controllers
                 // Load all staged teachers
                 var stagingRows = await _context.TeachersStaging.ToListAsync();
 
+                // ============================================================================
+                // STEP 1: PROCESS AND SAVE TEACHERS FIRST (so we have Teacher IDs for FK)
+                // ============================================================================
+                _logger?.LogInformation($"[Region {regionId}] Step 1: Processing and saving teachers...");
+                
                 // Get existing teachers by KtakTeacherId
                 var stagedIds = stagingRows.Select(s => s.KtakTeacherId).Distinct().ToList();
                 var existingTeachers = await _context.Teachers
-                    .Include(t => t.Subjects)
                     .Where(t => stagedIds.Contains(t.KtakTeacherId))
                     .ToListAsync();
 
@@ -471,6 +610,7 @@ namespace PordznakanAPI.Controllers
 
                 var newTeachers = new List<Teacher>();
                 var updatedCount = 0;
+                var updatedTeacherIds = new HashSet<int>(); // Track which teachers were updated (by KtakTeacherId)
 
                 // Process each staged teacher
                 foreach (var staging in stagingRows)
@@ -504,12 +644,8 @@ namespace PordznakanAPI.Controllers
                             existing.MD5 = staging.MD5;
                             existing.UpdatedAt = DateTime.UtcNow;
 
-                            // Clear existing subjects (will be reloaded below)
-                            _context.TeacherSubjects.RemoveRange(existing.Subjects);
-                            existing.Subjects.Clear();
-
                             updatedCount++;
-                            result.TeachersUpdatedList.Add(MapToTeacherDto(existing));
+                            updatedTeacherIds.Add(staging.KtakTeacherId);
                         }
                     }
                     else
@@ -548,76 +684,330 @@ namespace PordznakanAPI.Controllers
                     }
                 }
 
-                _logger?.LogInformation($"[Region {regionId}] Teacher MD5 compare done. New={newTeachers.Count}, Updated={updatedCount}. Saving...");
+                _logger?.LogInformation($"[Region {regionId}] Teacher MD5 compare done. New={newTeachers.Count}, Updated={updatedCount}. Saving teachers...");
 
-                // Add new teachers
+                // Save teachers to database FIRST (so we have their IDs for subjects FK)
                 if (newTeachers.Any())
                 {
                     _context.Teachers.AddRange(newTeachers);
                 }
 
-                // Save changes
                 if (updatedCount > 0 || newTeachers.Any())
                 {
                     await _context.SaveChangesAsync();
+                    _logger?.LogInformation($"[Region {regionId}] ✅ Teachers saved successfully. New: {newTeachers.Count}, Updated: {updatedCount}");
                 }
 
-                // Process subjects for all teachers (both new and existing)
-                // Reload all teachers to get their IDs
-                var allTeachersDict = (await _context.Teachers.ToListAsync())
-                    .ToDictionary(t => t.KtakTeacherId);
+                // Reload all teachers (including new ones) to get their IDs
+                var allTeachers = await _context.Teachers
+                    .Where(t => stagedIds.Contains(t.KtakTeacherId))
+                    .ToListAsync();
+                var teacherIdByKtakId = allTeachers.ToDictionary(t => t.KtakTeacherId, t => t.Id);
 
+                // ============================================================================
+                // STEP 2: PROCESS AND SAVE SUBJECTS (using TeacherId FK)
+                // After saving teachers, insert all subjects into the database.
+                // If subjects are null/empty, continue processing (no error).
+                // ============================================================================
+                _logger?.LogInformation($"[Region {regionId}] Step 2: Processing subjects for {teachersJsonData.Count} teachers...");
+                
+                // Log a sample teacher's JSON structure for debugging
+                if (teachersJsonData.Any())
+                {
+                    var firstKvp = teachersJsonData.First();
+                    var sampleTeacherId = firstKvp.Key;
+                    var sampleTeacher = firstKvp.Value;
+                    var sampleFields = string.Join(", ", sampleTeacher.Properties().Select(p => p.Name));
+                    _logger?.LogInformation($"[Region {regionId}] 📋 Sample teacher {sampleTeacherId} fields: {sampleFields}");
+                    
+                    var sampleSubjects = sampleTeacher["subjects"];
+                    if (sampleSubjects != null)
+                    {
+                        _logger?.LogInformation($"[Region {regionId}] 📚 Sample teacher {sampleTeacherId} 'subjects' field exists. Type: {sampleSubjects.Type}, Value (first 500 chars): {sampleSubjects.ToString(Formatting.None)?.Substring(0, Math.Min(500, sampleSubjects.ToString(Formatting.None)?.Length ?? 0))}");
+                    }
+                    else
+                    {
+                        _logger?.LogWarning($"[Region {regionId}] ⚠️ Sample teacher {sampleTeacherId} does NOT have 'subjects' field!");
+                    }
+                }
+                
+                var totalSubjectsProcessed = 0;
+                var totalSubjectsAdded = 0;
+                var totalSubjectsSkipped = 0;
+                var teachersWithSubjectChanges = new HashSet<int>(); // Track teachers whose subjects were updated (by KtakTeacherId)
+                var teachersWithNoSubjects = 0;
+                
+                // Clear existing subjects for all staged teachers (will be replaced with new ones)
+                var teacherIdsToClear = allTeachers.Select(t => t.Id).ToList();
+                
+                var existingSubjects = await _context.TeacherSubjects
+                    .Where(ts => teacherIdsToClear.Contains(ts.TeacherId))
+                    .ToListAsync();
+                
+                if (existingSubjects.Any())
+                {
+                    _context.TeacherSubjects.RemoveRange(existingSubjects);
+                    totalSubjectsProcessed = existingSubjects.Count;
+                    _logger?.LogInformation($"[Region {regionId}] Cleared {existingSubjects.Count} existing subjects for staged teachers");
+                }
+                
+                // Process subjects from JSON for each teacher
                 foreach (var kvp in teachersJsonData)
                 {
                     var ktakTeacherId = kvp.Key;
                     var teacherObj = kvp.Value;
 
-                    if (!allTeachersDict.TryGetValue(ktakTeacherId, out var teacher))
-                        continue;
-
-                    // Parse subjects array
-                    var subjectsToken = teacherObj["subjects"];
-                    if (subjectsToken is JArray subjectsArray)
+                    // Get the Teacher's Guid ID (must exist since we just saved teachers)
+                    if (!teacherIdByKtakId.TryGetValue(ktakTeacherId, out var teacherId))
                     {
-                        // Clear existing subjects for this teacher
-                        var existingSubjects = await _context.TeacherSubjects
-                            .Where(ts => ts.TeacherId == teacher.Id)
-                            .ToListAsync();
-                        _context.TeacherSubjects.RemoveRange(existingSubjects);
+                        _logger?.LogWarning($"[Region {regionId}] Teacher with KtakTeacherId {ktakTeacherId} not found, skipping subjects");
+                        continue;
+                    }
 
+                    // Parse and save subjects array - if null/empty, just continue to next teacher
+                    var subjectsToken = teacherObj["subjects"];
+                    JArray? subjectsArray = null;
+                    
+                    // Handle different formats: direct array, string containing JSON, or null
+                    if (subjectsToken != null && subjectsToken.Type != JTokenType.Null)
+                    {
+                        if (subjectsToken is JArray directArray)
+                        {
+                            subjectsArray = directArray;
+                        }
+                        else if (subjectsToken.Type == JTokenType.String)
+                        {
+                            // Parse string containing JSON array
+                            var subjectsJsonString = subjectsToken.Value<string>();
+                            if (!string.IsNullOrWhiteSpace(subjectsJsonString))
+                            {
+                                try
+                                {
+                                    var parsedToken = JToken.Parse(subjectsJsonString);
+                                    if (parsedToken is JArray parsedArray)
+                                    {
+                                        subjectsArray = parsedArray;
+                                    }
+                                }
+                                catch (Exception parseEx)
+                                {
+                                    _logger?.LogWarning($"[Region {regionId}] Failed to parse subjects JSON string for teacher {ktakTeacherId}: {parseEx.Message}");
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Check if subjects exist and is a valid array
+                    if (subjectsArray != null && subjectsArray.Count > 0)
+                    {
+                        _logger?.LogDebug($"[Region {regionId}] Processing {subjectsArray.Count} subjects for teacher {ktakTeacherId}");
+                        
+                        var subjectsAdded = 0;
+                        var subjectsSkipped = 0;
+                        var seenSubjects = new HashSet<string>(); // Track duplicates: "subjectId-grade-subGrade"
+                        
                         foreach (var subjectToken in subjectsArray)
                         {
                             if (subjectToken is not JObject subjectObj)
+                            {
+                                subjectsSkipped++;
+                                totalSubjectsSkipped++;
                                 continue;
+                            }
 
+                            // Parse subject_id (can be number or string)
+                            int subjectId;
                             var subjectIdToken = subjectObj["subject_id"];
-                            if (subjectIdToken == null || !int.TryParse(subjectIdToken.ToString(), out var subjectId))
+                            if (subjectIdToken == null)
+                            {
+                                subjectsSkipped++;
+                                totalSubjectsSkipped++;
                                 continue;
+                            }
+                            
+                            // Handle both number and string types
+                            if (subjectIdToken.Type == JTokenType.Integer)
+                            {
+                                subjectId = subjectIdToken.Value<int>();
+                            }
+                            else if (!int.TryParse(subjectIdToken.ToString(), out subjectId))
+                            {
+                                subjectsSkipped++;
+                                totalSubjectsSkipped++;
+                                continue;
+                            }
 
+                            // Parse grade (can be number or string)
+                            EGrade grade = (EGrade)0;
                             var gradeToken = subjectObj["grade"];
-                            var grade = gradeToken != null && int.TryParse(gradeToken.ToString(), out var g) 
-                                ? MapGrade(g) 
-                                : (EGrade)0;
+                            if (gradeToken != null)
+                            {
+                                if (gradeToken.Type == JTokenType.Integer)
+                                {
+                                    var gradeValue = gradeToken.Value<int>();
+                                    grade = MapGrade(gradeValue);
+                                }
+                                else if (int.TryParse(gradeToken.ToString(), out var parsedGrade))
+                                {
+                                    grade = MapGrade(parsedGrade);
+                                }
+                            }
 
-                            var subGrade = MapSubGrade(subjectObj["classifier"]?.ToString());
+                            // Parse classifier (subGrade) - should be string like "ա", "բ"
+                            var classifier = subjectObj["classifier"]?.ToString();
+                            var subGrade = MapSubGrade(classifier);
+                            
+                            // Parse subject_title (Name)
                             var subjectTitle = subjectObj["subject_title"]?.ToString() ?? string.Empty;
 
-                            _context.TeacherSubjects.Add(new TeacherSubject
+                            // Check for duplicates within the same API response
+                            var subjectKey = $"{subjectId}-{grade}-{subGrade}";
+                            if (seenSubjects.Contains(subjectKey))
+                            {
+                                subjectsSkipped++;
+                                totalSubjectsSkipped++;
+                                continue;
+                            }
+                            
+                            seenSubjects.Add(subjectKey);
+
+                            var newSubject = new TeacherSubject
                             {
                                 Id = Guid.NewGuid(),
-                                TeacherId = teacher.Id,
+                                TeacherId = teacherId,
                                 SubjectId = subjectId,
                                 Grade = grade,
                                 SubGrade = subGrade,
-                                Name = subjectTitle,
-                                ClassroomId = subjectObj["classroom_id"]?.ToString() ?? string.Empty
-                            });
+                                Name = subjectTitle
+                            };
+                            
+                            _context.TeacherSubjects.Add(newSubject);
+                            subjectsAdded++;
+                            totalSubjectsAdded++;
+                        }
+
+                        if (subjectsAdded > 0)
+                        {
+                            teachersWithSubjectChanges.Add(ktakTeacherId);
+                            _logger?.LogDebug($"[Region {regionId}] Added {subjectsAdded} subjects for teacher {ktakTeacherId}");
                         }
                     }
+                    else
+                    {
+                        // Subjects are null, empty, or invalid - just continue (don't log as error)
+                        teachersWithNoSubjects++;
+                    }
+                }
+                
+                _logger?.LogInformation($"[Region {regionId}] 📊 Subject processing summary: TotalAdded={totalSubjectsAdded}, TotalSkipped={totalSubjectsSkipped}, TeachersWithSubjects={teachersWithSubjectChanges.Count}, TeachersWithNoSubjects={teachersWithNoSubjects}, Removed={totalSubjectsProcessed}");
+                
+                // Save subjects to database - always try to save, even if null/empty (just continues if nothing to save)
+                try
+                {
+                    if (totalSubjectsAdded > 0 || totalSubjectsProcessed > 0)
+                    {
+                        _logger?.LogInformation($"[Region {regionId}] 💾 Saving {totalSubjectsAdded} new subjects and removing {totalSubjectsProcessed} old subjects to database...");
+                        
+                        var savedCount = await _context.SaveChangesAsync();
+                        _logger?.LogInformation($"[Region {regionId}] ✅ SaveChangesAsync completed. Entities saved: {savedCount}");
+                        
+                        // Verify subjects were actually saved
+                        var savedSubjectsCount = await _context.TeacherSubjects
+                            .Where(ts => teacherIdsToClear.Contains(ts.TeacherId))
+                            .CountAsync();
+                        _logger?.LogInformation($"[Region {regionId}] ✅ Verification: Found {savedSubjectsCount} subjects in database for {teacherIdsToClear.Count} teachers after save.");
+                    }
+                    else
+                    {
+                        _logger?.LogInformation($"[Region {regionId}] No subjects to save (all teachers have null/empty subjects). Continuing...");
+                    }
+                }
+                catch (DbUpdateException dbEx)
+                {
+                    _logger?.LogError(dbEx, $"[Region {regionId}] ❌ DATABASE ERROR saving subjects! Message: {dbEx.Message}");
+                    if (dbEx.InnerException != null)
+                    {
+                        _logger?.LogError($"[Region {regionId}] Inner exception: {dbEx.InnerException.Message}");
+                    }
+                    // Continue processing even if subject save fails
+                    _logger?.LogWarning($"[Region {regionId}] ⚠️ Continuing despite subject save error...");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, $"[Region {regionId}] ❌ ERROR saving subjects to database! Exception: {ex.Message}");
+                    // Continue processing even if subject save fails
+                    _logger?.LogWarning($"[Region {regionId}] ⚠️ Continuing despite subject save error...");
                 }
 
-                // Save subjects
-                await _context.SaveChangesAsync();
+                // ============================================================================
+                // STEP 3: RELOAD ALL CHANGED TEACHERS WITH SUBJECTS AND MAP TO DTOs
+                // ============================================================================
+                var allChangedKtakTeacherIds = updatedTeacherIds
+                    .Union(newTeachers.Select(t => t.KtakTeacherId))
+                    .Union(teachersWithSubjectChanges)
+                    .Distinct()
+                    .ToList();
+                
+                if (allChangedKtakTeacherIds.Any())
+                {
+                    _logger?.LogInformation($"[Region {regionId}] Step 3: Reloading {allChangedKtakTeacherIds.Count} changed teachers (updated: {updatedTeacherIds.Count}, new: {newTeachers.Count}, subjects changed: {teachersWithSubjectChanges.Count}) with subjects for DTO mapping...");
+                    
+                    // Load teachers
+                    var changedTeachers = await _context.Teachers
+                        .Where(t => allChangedKtakTeacherIds.Contains(t.KtakTeacherId))
+                        .ToListAsync();
+
+                    _logger?.LogInformation($"[Region {regionId}] Loaded {changedTeachers.Count} teachers from database for DTO mapping");
+
+                    // Load subjects directly from database (more reliable than navigation property)
+                    var teacherIds = changedTeachers.Select(t => t.Id).ToList();
+                    var allSubjects = await _context.TeacherSubjects
+                        .Where(ts => teacherIds.Contains(ts.TeacherId))
+                        .ToListAsync();
+                    
+                    var subjectsByTeacherId = allSubjects.GroupBy(s => s.TeacherId)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    
+                    _logger?.LogInformation($"[Region {regionId}] Direct database query: Found {allSubjects.Count} subjects for {subjectsByTeacherId.Count} teachers (out of {teacherIds.Count} total teachers)");
+
+                    foreach (var teacher in changedTeachers)
+                    {
+                        var teacherDto = MapToTeacherDto(teacher);
+                        
+                        // Map subjects from the directly loaded subjects
+                        if (subjectsByTeacherId.TryGetValue(teacher.Id, out var teacherSubjects) && teacherSubjects.Any())
+                        {
+                            teacherDto.Subjects = teacherSubjects.Select(s => new TeacherSubjectDto
+                            {
+                                Id = s.Id,
+                                TeacherDtoId = teacherDto.Id,
+                                TeacherDto = teacherDto,
+                                SubjectId = s.SubjectId,
+                                Grade = s.Grade,
+                                SubGrade = s.SubGrade,
+                                Name = s.Name
+                            }).ToList();
+                        }
+                        else
+                        {
+                            teacherDto.Subjects = new List<TeacherSubjectDto>();
+                        }
+                        
+                        result.TeachersUpdatedList.Add(teacherDto);
+                    }
+                    
+                    var totalSubjectsInDtos = result.TeachersUpdatedList.Sum(t => t.Subjects.Count);
+                    _logger?.LogInformation($"[Region {regionId}] Mapped {changedTeachers.Count} teachers with subjects to DTOs. Total subjects in DTOs: {totalSubjectsInDtos}");
+                    
+                    if (totalSubjectsInDtos == 0 && allSubjects.Count > 0)
+                    {
+                        _logger?.LogWarning($"[Region {regionId}] ⚠️ Subjects exist in DB ({allSubjects.Count}) but not mapped to DTOs!");
+                    }
+                    else if (totalSubjectsInDtos == 0)
+                    {
+                        _logger?.LogWarning($"[Region {regionId}] ⚠️ No subjects found in database for these teachers. Check if subjects were saved successfully in Step 2.");
+                    }
+                }
 
                 // Cleanup staging
                 await _context.TeachersStaging.ExecuteDeleteAsync();
@@ -625,7 +1015,7 @@ namespace PordznakanAPI.Controllers
                 result.Success = true;
                 result.TeachersProcessed = stagingRows.Count;
                 result.TeachersAdded = newTeachers.Count;
-                result.TeachersUpdated = updatedCount;
+                result.TeachersUpdated = updatedCount + newTeachers.Count; // Include newly added as updated
 
                 return result;
             }
@@ -649,6 +1039,79 @@ namespace PordznakanAPI.Controllers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Sends updated teachers to the external API endpoint (including TeacherSubjects)
+        /// </summary>
+        private async Task SendUpdatedTeachersToApi(List<TeacherDto> updatedTeachers)
+        {
+            try
+            {
+                var totalSubjects = updatedTeachers.Sum(t => t.Subjects?.Count ?? 0);
+                var teachersWithSubjects = updatedTeachers.Count(t => t.Subjects != null && t.Subjects.Any());
+                
+                _logger?.LogInformation($"Sending {updatedTeachers.Count} updated teachers to external API (with {totalSubjects} total subjects across {teachersWithSubjects} teachers)...");
+                
+                // Log sample to verify subjects are included
+                var sampleTeacher = updatedTeachers.FirstOrDefault(t => t.Subjects != null && t.Subjects.Any());
+                if (sampleTeacher != null)
+                {
+                    _logger?.LogInformation($"Sample teacher {sampleTeacher.KtakTeacherId} has {sampleTeacher.Subjects.Count} subjects: {string.Join(", ", sampleTeacher.Subjects.Select(s => $"{s.Name}({s.SubjectId})"))}");
+                }
+
+                var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new HttpClient(handler);
+                client.Timeout = TimeSpan.FromMinutes(5);
+
+                // Serialize teachers with all properties including Subjects
+                // Note: TeacherDto navigation property in TeacherSubjectDto is marked with [JsonIgnore] to prevent circular references
+                var json = JsonConvert.SerializeObject(updatedTeachers, new JsonSerializerSettings
+                {
+                    NullValueHandling = NullValueHandling.Ignore,
+                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ",
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+                });
+                
+                // Log JSON size and verify subjects are in the JSON
+                var jsonLength = json.Length;
+                _logger?.LogInformation($"Serialized JSON length: {jsonLength} bytes. Checking if subjects are included...");
+                
+                // Verify subjects are in the JSON by checking for subject properties
+                if (json.Contains("\"SubjectId\"") && json.Contains("\"Name\""))
+                {
+                    _logger?.LogInformation("✅ Verified: Subjects are included in the JSON (found SubjectId and Name properties)");
+                }
+                else
+                {
+                    _logger?.LogWarning("⚠️ Warning: Subjects may not be included in the JSON (SubjectId or Name properties not found)");
+                }
+
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync(
+                    "https://crm.dshh.am:1400/api/bulk-update/teachers",
+                    content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogInformation($"Successfully sent {updatedTeachers.Count} teachers to external API. Response: {responseContent}");
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"Failed to send teachers to external API. Status: {response.StatusCode}, Response: {errorContent}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Exception while sending updated teachers to external API");
+            }
         }
 
         [HttpPost("sync/{regionId?}")]

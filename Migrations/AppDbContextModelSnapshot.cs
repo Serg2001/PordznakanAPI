@@ -1360,10 +1360,6 @@ namespace PordznakanAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("ClassroomId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("Grade")
                         .HasColumnType("int");
 

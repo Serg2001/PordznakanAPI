@@ -5,7 +5,16 @@ namespace PordznakanAPI.Models
     public class TeacherSubject
     {
         public Guid Id { get; set; }
+        
+        /// <summary>
+        /// Foreign key to Teacher
+        /// </summary>
         public Guid TeacherId { get; set; }
+        
+        /// <summary>
+        /// Navigation property to Teacher
+        /// </summary>
+        public Teacher Teacher { get; set; } = null!;
         
         /// <summary>
         /// Առարկայի ID Ktak-ից
@@ -26,13 +35,5 @@ namespace PordznakanAPI.Models
         /// Առարկայի անունը
         /// </summary>
         public string Name { get; set; } = string.Empty;
-        
-        /// <summary>
-        /// Classroom ID from Ktak
-        /// </summary>
-        public string ClassroomId { get; set; } = string.Empty;
-
-        // Navigation property
-        public Teacher? Teacher { get; set; }
     }
 }
