@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PordznakanAPI.Data;
+using PordznakanAPI.Services;
 using Hangfire;
 using Hangfire.SqlServer;
 using PordznakanAPI.Controllers;
@@ -55,6 +56,9 @@ builder.Services.AddLogging(logging =>
     logging.AddConsole();
     logging.SetMinimumLevel(LogLevel.Information);
 });
+
+builder.Services.AddScoped<ILogTransferService, LogTransferService>();
+builder.Services.AddScoped<ISyncReportService, SyncReportService>();
 
 var app = builder.Build();
 

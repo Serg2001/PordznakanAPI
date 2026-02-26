@@ -8,6 +8,7 @@ namespace PordznakanAPI.Models
         public Guid Id { get; set; }
         public string MmuhStaffId { get; set; } = string.Empty;          // staff_id from external API
         public string InstId { get; set; } = string.Empty;                // inst_id (institution ID)
+        public int RegionId { get; set; }                                  // Region identifier (1-10)
         public string InstName { get; set; } = string.Empty;              // inst_name (institution name)
         
         public string FirstName { get; set; } = string.Empty;              // first_name

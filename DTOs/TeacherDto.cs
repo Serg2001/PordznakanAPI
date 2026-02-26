@@ -7,6 +7,7 @@ namespace PordznakanAPI.DTOs
         public Guid Id { get; set; }
         public int KtakTeacherId { get; set; }
         public int KtakSchoolId { get; set; }
+        public int RegionId { get; set; }
         public KtakPlace Place { get; set; }
         
         /// <summary>

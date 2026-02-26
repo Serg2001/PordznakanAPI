@@ -5,6 +5,7 @@ namespace PordznakanAPI.DTOs
         public Guid Id { get; set; }
         public string MmuhStaffId { get; set; } = string.Empty;
         public string InstId { get; set; } = string.Empty;
+        public int RegionId { get; set; }
         public string InstName { get; set; } = string.Empty;
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;

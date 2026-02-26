@@ -6,9 +6,8 @@ using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
 using PordznakanAPI.Enums;
+using PordznakanAPI.Services;
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PordznakanAPI.Controllers
 {
@@ -48,6 +47,7 @@ namespace PordznakanAPI.Controllers
                 Id = teacher.Id,
                 KtakTeacherId = teacher.KtakTeacherId,
                 KtakSchoolId = teacher.KtakSchoolId,
+                RegionId = teacher.RegionId,
                 Place = teacher.Place,
                 FirstName = teacher.FirstName,
                 LastName = teacher.LastName,
@@ -71,7 +71,6 @@ namespace PordznakanAPI.Controllers
             };
         }
 
-        // === Helper for MD5 generation ===
         private static string ComputeTeacherMd5(
             int ktakTeacherId,
             int ktakSchoolId,
@@ -95,35 +94,28 @@ namespace PordznakanAPI.Controllers
             string mainSubjectId,
             string mainSubject)
         {
-            var raw = string.Join('|', new[]
-            {
+            return SyncHelpers.ComputeMd5(
                 ktakTeacherId.ToString(),
                 ktakSchoolId.ToString(),
                 place.ToString(),
-                firstName ?? string.Empty,
-                lastName ?? string.Empty,
-                fatherName ?? string.Empty,
+                firstName,
+                lastName,
+                fatherName,
                 gender ? "1" : "0",
                 birthday.HasValue ? birthday.Value.ToString("yyyy-MM-dd") : string.Empty,
-                phone ?? string.Empty,
-                address ?? string.Empty,
-                email ?? string.Empty,
-                socNumber ?? string.Empty,
+                phone,
+                address,
+                email,
+                socNumber,
                 experience.ToString(),
                 academicRank.ToString(),
                 education.ToString(),
                 commandDate.HasValue ? commandDate.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : string.Empty,
                 digitLevel.ToString(),
-                activated ?? string.Empty,
-                workType ?? string.Empty,
-                mainSubjectId ?? string.Empty,
-                mainSubject ?? string.Empty
-            });
-
-            using var md5 = MD5.Create();
-            var bytes = Encoding.UTF8.GetBytes(raw);
-            var hash = md5.ComputeHash(bytes);
-            return Convert.ToHexString(hash);
+                activated,
+                workType,
+                mainSubjectId,
+                mainSubject);
         }
 
         // === Helper mappers for enums ===
@@ -294,60 +286,9 @@ namespace PordznakanAPI.Controllers
                 summary.AllTeachersUpdated.AddRange(result.TeachersUpdatedList);
             }
 
-            // Generate and save JSON file
-            await SaveChangesToJsonFile(summary);
-
             _logger?.LogInformation($"Teacher sync completed for all regions. " +
                 $"Success: {successCount}/{regionIds.Length}. " +
-                $"Total - Teachers: {summary.TotalTeachersAdded} added, {summary.TotalTeachersUpdated} updated. " +
-                $"Changes saved to JSON file.");
-
-            // Send updated teachers to external API
-            if (summary.AllTeachersUpdated.Any())
-            {
-                await SendUpdatedTeachersToApi(summary.AllTeachersUpdated);
-            }
-        }
-
-        public TeacherChangedEntitiesDto GetChangedTeachers(List<TeacherSyncResult> results)
-        {
-            var dto = new TeacherChangedEntitiesDto();
-
-            foreach (var result in results.Where(r => r.Success))
-            {
-                dto.TeachersUpdated.AddRange(result.TeachersUpdatedList);
-            }
-
-            return dto;
-        }
-
-        private async Task SaveChangesToJsonFile(TeacherSyncSummaryDto summary)
-        {
-            try
-            {
-                var json = JsonConvert.SerializeObject(summary, Formatting.Indented, new JsonSerializerSettings
-                {
-                    NullValueHandling = NullValueHandling.Ignore,
-                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ"
-                });
-
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "TeacherSyncReports");
-                if (!Directory.Exists(reportsDirectory))
-                {
-                    Directory.CreateDirectory(reportsDirectory);
-                }
-
-                var fileName = $"teacher-sync-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
-                var filePath = Path.Combine(reportsDirectory, fileName);
-                await System.IO.File.WriteAllTextAsync(filePath, json);
-
-                var latestFilePath = Path.Combine(reportsDirectory, "teacher-sync-latest.json");
-                await System.IO.File.WriteAllTextAsync(latestFilePath, json);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to save teacher sync summary");
-            }
+                $"Total - Teachers: {summary.TotalTeachersAdded} added, {summary.TotalTeachersUpdated} updated.");
         }
 
         private async Task<TeacherSyncResult> SyncRegionInternal(int regionId)
@@ -563,6 +504,7 @@ namespace PordznakanAPI.Controllers
                         Id = Guid.NewGuid(),
                         KtakTeacherId = ktakTeacherId,
                         KtakSchoolId = ktakSchoolId,
+                        RegionId = regionId,
                         Place = KtakPlace.School,
                         FirstName = firstName,
                         LastName = lastName,
@@ -622,6 +564,7 @@ namespace PordznakanAPI.Controllers
                         {
                             // MD5 changed → update from staging
                             existing.KtakSchoolId = staging.KtakSchoolId;
+                            existing.RegionId = staging.RegionId;
                             existing.Place = staging.Place;
                             existing.FirstName = staging.FirstName;
                             existing.LastName = staging.LastName;
@@ -656,6 +599,7 @@ namespace PordznakanAPI.Controllers
                             Id = Guid.NewGuid(),
                             KtakTeacherId = staging.KtakTeacherId,
                             KtakSchoolId = staging.KtakSchoolId,
+                            RegionId = staging.RegionId,
                             Place = staging.Place,
                             FirstName = staging.FirstName,
                             LastName = staging.LastName,
@@ -1039,79 +983,6 @@ namespace PordznakanAPI.Controllers
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// Sends updated teachers to the external API endpoint (including TeacherSubjects)
-        /// </summary>
-        private async Task SendUpdatedTeachersToApi(List<TeacherDto> updatedTeachers)
-        {
-            try
-            {
-                var totalSubjects = updatedTeachers.Sum(t => t.Subjects?.Count ?? 0);
-                var teachersWithSubjects = updatedTeachers.Count(t => t.Subjects != null && t.Subjects.Any());
-                
-                _logger?.LogInformation($"Sending {updatedTeachers.Count} updated teachers to external API (with {totalSubjects} total subjects across {teachersWithSubjects} teachers)...");
-                
-                // Log sample to verify subjects are included
-                var sampleTeacher = updatedTeachers.FirstOrDefault(t => t.Subjects != null && t.Subjects.Any());
-                if (sampleTeacher != null)
-                {
-                    _logger?.LogInformation($"Sample teacher {sampleTeacher.KtakTeacherId} has {sampleTeacher.Subjects.Count} subjects: {string.Join(", ", sampleTeacher.Subjects.Select(s => $"{s.Name}({s.SubjectId})"))}");
-                }
-
-                var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-                };
-
-                using var client = new HttpClient(handler);
-                client.Timeout = TimeSpan.FromMinutes(5);
-
-                // Serialize teachers with all properties including Subjects
-                // Note: TeacherDto navigation property in TeacherSubjectDto is marked with [JsonIgnore] to prevent circular references
-                var json = JsonConvert.SerializeObject(updatedTeachers, new JsonSerializerSettings
-                {
-                    NullValueHandling = NullValueHandling.Ignore,
-                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ",
-                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-                });
-                
-                // Log JSON size and verify subjects are in the JSON
-                var jsonLength = json.Length;
-                _logger?.LogInformation($"Serialized JSON length: {jsonLength} bytes. Checking if subjects are included...");
-                
-                // Verify subjects are in the JSON by checking for subject properties
-                if (json.Contains("\"SubjectId\"") && json.Contains("\"Name\""))
-                {
-                    _logger?.LogInformation("✅ Verified: Subjects are included in the JSON (found SubjectId and Name properties)");
-                }
-                else
-                {
-                    _logger?.LogWarning("⚠️ Warning: Subjects may not be included in the JSON (SubjectId or Name properties not found)");
-                }
-
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                var response = await client.PostAsync(
-                    "https://crm.dshh.am:1400/api/bulk-update/teachers",
-                    content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    _logger?.LogInformation($"Successfully sent {updatedTeachers.Count} teachers to external API. Response: {responseContent}");
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger?.LogError($"Failed to send teachers to external API. Status: {response.StatusCode}, Response: {errorContent}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, $"Exception while sending updated teachers to external API");
-            }
         }
 
         [HttpPost("sync/{regionId?}")]

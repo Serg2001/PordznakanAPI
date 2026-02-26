@@ -79,6 +79,7 @@ namespace PordznakanAPI.Controllers
                 Id = classroom.Id,
                 KtakSchoolId = classroom.KtakSchoolId,
                 KtakClassroomId = classroom.KtakClassroomId,
+                RegionId = classroom.RegionId,
                 Grade = classroom.Grade,
                 Classifier = classroom.Classifier,
                 ClassName = classroom.ClassName,
@@ -96,6 +97,7 @@ namespace PordznakanAPI.Controllers
                 Id = pupil.Id,
                 KtakPupilId = pupil.KtakPupilId,
                 KtakSchoolId = pupil.KtakSchoolId,
+                RegionId = pupil.RegionId,
                 ClassroomId = pupil.ClassroomId,
                 ClassroomInternalId = pupil.ClassroomInternalId,
                 Place = pupil.Place,
@@ -301,82 +303,13 @@ namespace PordznakanAPI.Controllers
                 summary.AllPupilsUpdated.AddRange(result.PupilsUpdatedList);
             }
 
-            // Generate and save JSON file
-            await SaveChangesToJsonFile(summary);
-
-            // Get changed entities for external API
-            var changedEntities = GetChangedEntities(results);
-
             _logger?.LogInformation($"Sync completed for all regions. " +
                 $"Success: {successCount}/{regionIds.Length}. " +
                 $"Total - Schools: {summary.TotalSchoolsAdded} added, {summary.TotalSchoolsUpdated} updated. " +
                 $"Classrooms: {summary.TotalClassroomsAdded} added, {summary.TotalClassroomsUpdated} updated. " +
-                $"Pupils: {summary.TotalPupilsAdded} added, {summary.TotalPupilsUpdated} updated. " +
-                $"Changes saved to JSON file.");
-
-            // TODO: Send changedEntities to external API here
-            // await SendToExternalApi(changedEntities);
+                $"Pupils: {summary.TotalPupilsAdded} added, {summary.TotalPupilsUpdated} updated.");
         }
 
-        /// <summary>
-        /// Returns a list of all changed entities (added and updated) as DTOs.
-        /// This function can be used to send data to another API.
-        /// </summary>
-        public ChangedEntitiesDto GetChangedEntities(List<SyncResult> syncResults)
-        {
-            var changedEntities = new ChangedEntitiesDto();
-
-            foreach (var result in syncResults.Where(r => r.Success))
-            {
-                changedEntities.SchoolsUpdated.AddRange(result.SchoolsUpdatedList);
-                changedEntities.ClassroomsUpdated.AddRange(result.ClassroomsUpdatedList);
-                changedEntities.PupilsUpdated.AddRange(result.PupilsUpdatedList);
-            }
-
-            return changedEntities;
-        }
-
-        /// <summary>
-        /// Saves the sync changes summary to a JSON file
-        /// </summary>
-        private async Task SaveChangesToJsonFile(SyncChangesSummaryDto summary)
-        {
-            try
-            {
-                var json = JsonConvert.SerializeObject(summary, Formatting.Indented, new JsonSerializerSettings
-                {
-                    NullValueHandling = NullValueHandling.Ignore,
-                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ"
-                });
-
-                // Create a directory for sync reports if it doesn't exist
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "SyncReports");
-                if (!Directory.Exists(reportsDirectory))
-                {
-                    Directory.CreateDirectory(reportsDirectory);
-                }
-
-                // Save with timestamp in filename
-                var fileName = $"sync-changes-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
-                var filePath = Path.Combine(reportsDirectory, fileName);
-
-                await System.IO.File.WriteAllTextAsync(filePath, json);
-
-                // Also save as "latest" for easy access
-                var latestFilePath = Path.Combine(reportsDirectory, "sync-changes-latest.json");
-                await System.IO.File.WriteAllTextAsync(latestFilePath, json);
-
-                _logger?.LogInformation($"Sync changes saved to: {filePath}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to save sync changes to JSON file");
-            }
-        }
-
-        /// <summary>
-        /// HTTP endpoint to sync a specific region
-        /// </summary>
         /// <summary>
         /// Internal method that performs the sync operation for a single region
         /// </summary>
@@ -473,6 +406,7 @@ namespace PordznakanAPI.Controllers
                                     Id = Guid.NewGuid(),
                                     KtakSchoolId = ktakSchoolId,
                                     KtakClassroomId = ktakClassroomId,
+                                    RegionId = regionId,
                                     Grade = cl["grade"]?.ToString() ?? "",
                                     Classifier = cl["classifier"]?.ToString() ?? "",
                                     ClassName = cl["class"]?.ToString() ?? "",
@@ -558,6 +492,7 @@ namespace PordznakanAPI.Controllers
                                                             Id = Guid.NewGuid(),
                                                             KtakPupilId = pupilId,
                                                             KtakSchoolId = ktakSchoolIdInt,
+                                                            RegionId = regionId,
                                                             ClassroomId = ktakClassroomId,
                                                             ClassroomInternalId = null, // will be set after classrooms are saved
                                                             Place = KtakPlace.School,
@@ -653,6 +588,7 @@ namespace PordznakanAPI.Controllers
                     if (existingClassroomsDict.TryGetValue(classroomKey, out var existingClassroom))
                     {
                         // Overwrite all fields without per-property comparison
+                        existingClassroom.RegionId = classroom.RegionId;
                         existingClassroom.Grade = classroom.Grade;
                         existingClassroom.Classifier = classroom.Classifier;
                         existingClassroom.ClassName = classroom.ClassName;
@@ -719,6 +655,7 @@ namespace PordznakanAPI.Controllers
                         {
                             // MD5 changed → update real row from staging
                             r.KtakSchoolId = s.KtakSchoolId;
+                            r.RegionId = s.RegionId;
                             r.ClassroomId = s.ClassroomId;
                             r.ClassroomInternalId = s.ClassroomInternalId;
                             r.Place = s.Place;
@@ -747,6 +684,7 @@ namespace PordznakanAPI.Controllers
                             Id = Guid.NewGuid(),
                             KtakPupilId = s.KtakPupilId,
                             KtakSchoolId = s.KtakSchoolId,
+                            RegionId = s.RegionId,
                             ClassroomId = s.ClassroomId,
                             ClassroomInternalId = s.ClassroomInternalId,
                             Place = s.Place,

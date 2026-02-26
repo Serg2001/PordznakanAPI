@@ -6,9 +6,7 @@ using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
 using PordznakanAPI.Enums;
-using System.IO;
-using System.Security.Cryptography;
-using System.Text;
+using PordznakanAPI.Services;
 
 namespace PordznakanAPI.Controllers
 {
@@ -33,11 +31,13 @@ namespace PordznakanAPI.Controllers
     public class NmuhStudentController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ISyncReportService _syncReportService;
         private readonly ILogger<NmuhStudentController>? _logger;
 
-        public NmuhStudentController(AppDbContext context, ILogger<NmuhStudentController>? logger = null)
+        public NmuhStudentController(AppDbContext context, ISyncReportService syncReportService, ILogger<NmuhStudentController>? logger = null)
         {
             _context = context;
+            _syncReportService = syncReportService;
             _logger = logger;
         }
 
@@ -48,6 +48,7 @@ namespace PordznakanAPI.Controllers
                 Id = student.Id,
                 NmuhStudentId = student.NmuhStudentId,
                 NmuhSchoolId = student.NmuhSchoolId,
+                RegionId = student.RegionId,
                 SchoolName = student.SchoolName,
                 Marz = student.Marz,
                 FirstName = student.FirstName,
@@ -65,64 +66,6 @@ namespace PordznakanAPI.Controllers
             };
         }
 
-        // === Helper for MD5 generation ===
-        private static string ComputeNmuhStudentMd5(
-            string nmuhStudentId,
-            string nmuhSchoolId,
-            string schoolName,
-            string marz,
-            string firstName,
-            string lastName,
-            string fatherName,
-            DateOnly dateOfBirth,
-            string socNumber,
-            string sex,
-            bool graduated,
-            string eduYear,
-            string groupId,
-            EGrade classroomGrade)
-        {
-            var raw = string.Join('|', new[]
-            {
-                nmuhStudentId ?? string.Empty,
-                nmuhSchoolId ?? string.Empty,
-                schoolName ?? string.Empty,
-                marz ?? string.Empty,
-                firstName ?? string.Empty,
-                lastName ?? string.Empty,
-                fatherName ?? string.Empty,
-                dateOfBirth.ToString("yyyy-MM-dd"),
-                socNumber ?? string.Empty,
-                sex ?? string.Empty,
-                graduated ? "1" : "0",
-                eduYear ?? string.Empty,
-                groupId ?? string.Empty,
-                classroomGrade.ToString()
-            });
-
-            using var md5 = MD5.Create();
-            var bytes = Encoding.UTF8.GetBytes(raw);
-            var hash = md5.ComputeHash(bytes);
-            return Convert.ToHexString(hash);
-        }
-
-        // === Helper mappers ===
-        private static EGrade MapGrade(string? grade)
-        {
-            if (int.TryParse(grade, out var g) && g >= 1 && g <= 12)
-            {
-                return (EGrade)g;
-            }
-            return 0; // default
-        }
-
-        private static bool MapGraduated(string? graduated)
-        {
-            if (string.IsNullOrWhiteSpace(graduated))
-                return false;
-            
-            return graduated.Trim() == "1" || graduated.Trim().ToLowerInvariant() == "true";
-        }
 
         public async Task SyncAllRegions()
         {
@@ -174,54 +117,9 @@ namespace PordznakanAPI.Controllers
                 summary.AllStudentsUpdated.AddRange(result.StudentsUpdatedList);
             }
 
-            await SaveChangesToJsonFile(summary);
-
             _logger?.LogInformation($"NmuhStudent sync completed for all regions. " +
                 $"Success: {summary.SuccessfulRegions}/{regionIds.Length}. " +
                 $"Total - Students: {summary.TotalStudentsAdded} added, {summary.TotalStudentsUpdated} updated.");
-        }
-
-        public NmuhStudentChangedEntitiesDto GetChangedStudents(List<NmuhStudentSyncResult> results)
-        {
-            var dto = new NmuhStudentChangedEntitiesDto();
-
-            foreach (var result in results.Where(r => r.Success))
-            {
-                dto.StudentsUpdated.AddRange(result.StudentsUpdatedList);
-            }
-
-            return dto;
-        }
-
-        private async Task SaveChangesToJsonFile(NmuhStudentSyncSummaryDto summary)
-        {
-            try
-            {
-                var json = JsonConvert.SerializeObject(summary, Formatting.Indented, new JsonSerializerSettings
-                {
-                    NullValueHandling = NullValueHandling.Ignore,
-                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ"
-                });
-
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "NmuhStudentSyncReports");
-                if (!Directory.Exists(reportsDirectory))
-                {
-                    Directory.CreateDirectory(reportsDirectory);
-                }
-
-                var fileName = $"nmuh-student-sync-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
-                var filePath = Path.Combine(reportsDirectory, fileName);
-                await System.IO.File.WriteAllTextAsync(filePath, json);
-
-                var latestFilePath = Path.Combine(reportsDirectory, "nmuh-student-sync-latest.json");
-                await System.IO.File.WriteAllTextAsync(latestFilePath, json);
-
-                _logger?.LogInformation($"NmuhStudent sync changes saved to: {filePath}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to save NmuhStudent sync summary");
-            }
         }
 
         private async Task<NmuhStudentSyncResult> SyncRegionInternal(int regionId)
@@ -274,13 +172,13 @@ namespace PordznakanAPI.Controllers
                     }
 
                     // Parse graduated
-                    var graduated = MapGraduated(studentObj["graduated"]?.ToString());
+                    var graduated = SyncHelpers.MapGraduated(studentObj["graduated"]?.ToString());
 
                     // Parse classroom_grade
-                    var classroomGrade = MapGrade(studentObj["classroom_grade"]?.ToString());
+                    var classroomGrade = SyncHelpers.MapGrade(studentObj["classroom_grade"]?.ToString());
 
                     // Compute MD5
-                    var md5 = ComputeNmuhStudentMd5(
+                    var md5 = SyncHelpers.ComputeMd5(
                         studentIdStr,
                         schoolIdStr,
                         schoolName,
@@ -288,13 +186,13 @@ namespace PordznakanAPI.Controllers
                         firstName,
                         lastName,
                         fatherName,
-                        dateOfBirth,
+                        dateOfBirth.ToString("yyyy-MM-dd"),
                         socNumber,
                         sex,
-                        graduated,
+                        graduated ? "1" : "0",
                         eduYear,
                         groupId,
-                        classroomGrade);
+                        classroomGrade.ToString());
 
                     // Stream directly into staging table
                     _context.NmuhStudentsStaging.Add(new NmuhStudentStaging
@@ -302,6 +200,7 @@ namespace PordznakanAPI.Controllers
                         Id = Guid.NewGuid(),
                         NmuhStudentId = studentIdStr,
                         NmuhSchoolId = schoolIdStr,
+                        RegionId = regionId,
                         SchoolName = schoolName,
                         Marz = marz,
                         FirstName = firstName,
@@ -347,6 +246,7 @@ namespace PordznakanAPI.Controllers
                         {
                             // MD5 changed → update from staging
                             existing.NmuhSchoolId = staging.NmuhSchoolId;
+                            existing.RegionId = staging.RegionId;
                             existing.SchoolName = staging.SchoolName;
                             existing.Marz = staging.Marz;
                             existing.FirstName = staging.FirstName;
@@ -374,6 +274,7 @@ namespace PordznakanAPI.Controllers
                             Id = Guid.NewGuid(),
                             NmuhStudentId = staging.NmuhStudentId,
                             NmuhSchoolId = staging.NmuhSchoolId,
+                            RegionId = staging.RegionId,
                             SchoolName = staging.SchoolName,
                             Marz = staging.Marz,
                             FirstName = staging.FirstName,
@@ -458,16 +359,12 @@ namespace PordznakanAPI.Controllers
         {
             try
             {
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "NmuhStudentSyncReports");
-                var latestFilePath = Path.Combine(reportsDirectory, "nmuh-student-sync-latest.json");
+                var summary = _syncReportService.ReadLatestReport<NmuhStudentSyncSummaryDto>(
+                    "NmuhStudentSyncReports", "nmuh-student-sync-latest.json");
 
-                if (!System.IO.File.Exists(latestFilePath))
-                {
+                if (summary == null)
                     return NotFound(new { message = "No NmuhStudent sync file found. Run a sync first." });
-                }
 
-                var jsonContent = System.IO.File.ReadAllText(latestFilePath);
-                var summary = JsonConvert.DeserializeObject<NmuhStudentSyncSummaryDto>(jsonContent);
                 return Ok(summary);
             }
             catch (Exception ex)
@@ -481,28 +378,13 @@ namespace PordznakanAPI.Controllers
         {
             try
             {
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "NmuhStudentSyncReports");
-                var latestFilePath = Path.Combine(reportsDirectory, "nmuh-student-sync-latest.json");
-
-                if (!System.IO.File.Exists(latestFilePath))
-                {
-                    return NotFound(new { message = "No NmuhStudent sync file found. Run a sync first." });
-                }
-
-                var jsonContent = System.IO.File.ReadAllText(latestFilePath);
-                var summary = JsonConvert.DeserializeObject<NmuhStudentSyncSummaryDto>(jsonContent);
+                var summary = _syncReportService.ReadLatestReport<NmuhStudentSyncSummaryDto>(
+                    "NmuhStudentSyncReports", "nmuh-student-sync-latest.json");
 
                 if (summary == null)
-                {
-                    return NotFound(new { message = "Could not parse NmuhStudent sync file." });
-                }
+                    return NotFound(new { message = "No NmuhStudent sync file found. Run a sync first." });
 
-                var dto = new NmuhStudentChangedEntitiesDto
-                {
-                    StudentsUpdated = summary.AllStudentsUpdated
-                };
-
-                return Ok(dto);
+                return Ok(new NmuhStudentChangedEntitiesDto { StudentsUpdated = summary.AllStudentsUpdated });
             }
             catch (Exception ex)
             {

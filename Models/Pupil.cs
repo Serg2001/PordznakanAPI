@@ -7,6 +7,7 @@ namespace PordznakanAPI.Models
         public Guid Id { get; set; }
         public int KtakPupilId { get; set; }           // id from external API
         public int KtakSchoolId { get; set; }          // schools_id from external API
+        public int RegionId { get; set; }              // Region identifier (1-10)
         public string ClassroomId { get; set; } = string.Empty;  // classroom id from external API (KtakClassroomId)
         public Guid? ClassroomInternalId { get; set; }           // Foreign key to Classroom.Id (internal database ID)
 

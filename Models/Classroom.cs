@@ -7,6 +7,8 @@
         public string KtakSchoolId { get; set; } = string.Empty;
 
         public string KtakClassroomId { get; set; } = string.Empty;
+        
+        public int RegionId { get; set; }              // Region identifier (1-10)
 
         public string Grade { get; set; } = string.Empty;
 

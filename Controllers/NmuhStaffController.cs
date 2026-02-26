@@ -5,9 +5,7 @@ using Newtonsoft.Json.Linq;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
-using System.IO;
-using System.Security.Cryptography;
-using System.Text;
+using PordznakanAPI.Services;
 
 namespace PordznakanAPI.Controllers
 {
@@ -32,11 +30,13 @@ namespace PordznakanAPI.Controllers
     public class NmuhStaffController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly ISyncReportService _syncReportService;
         private readonly ILogger<NmuhStaffController>? _logger;
 
-        public NmuhStaffController(AppDbContext context, ILogger<NmuhStaffController>? logger = null)
+        public NmuhStaffController(AppDbContext context, ISyncReportService syncReportService, ILogger<NmuhStaffController>? logger = null)
         {
             _context = context;
+            _syncReportService = syncReportService;
             _logger = logger;
         }
 
@@ -47,6 +47,7 @@ namespace PordznakanAPI.Controllers
                 Id = staff.Id,
                 NmuhStaffId = staff.NmuhStaffId,
                 InstId = staff.InstId,
+                RegionId = staff.RegionId,
                 InstName = staff.InstName,
                 FirstName = staff.FirstName,
                 LastName = staff.LastName,
@@ -76,70 +77,6 @@ namespace PordznakanAPI.Controllers
             };
         }
 
-        // === Helper for MD5 generation ===
-        private static string ComputeNmuhStaffMd5(
-            string nmuhStaffId,
-            string instId,
-            string instName,
-            string firstName,
-            string lastName,
-            string fatherName,
-            DateOnly dateOfBirth,
-            string socNumber,
-            string sex,
-            string address,
-            string phone,
-            string citizenship,
-            string nationality,
-            string identDocument,
-            string identDocumentNumber,
-            string fromCountry,
-            string inFiz,
-            string druyq,
-            string? partlyIds,
-            string? partlyInstNames,
-            string positionName,
-            string positionId,
-            string positionDetailId,
-            string positionDetailName,
-            string? groupId,
-            string groupsJson)
-        {
-            var raw = string.Join('|', new[]
-            {
-                nmuhStaffId ?? string.Empty,
-                instId ?? string.Empty,
-                instName ?? string.Empty,
-                firstName ?? string.Empty,
-                lastName ?? string.Empty,
-                fatherName ?? string.Empty,
-                dateOfBirth.ToString("yyyy-MM-dd"),
-                socNumber ?? string.Empty,
-                sex ?? string.Empty,
-                address ?? string.Empty,
-                phone ?? string.Empty,
-                citizenship ?? string.Empty,
-                nationality ?? string.Empty,
-                identDocument ?? string.Empty,
-                identDocumentNumber ?? string.Empty,
-                fromCountry ?? string.Empty,
-                inFiz ?? string.Empty,
-                druyq ?? string.Empty,
-                partlyIds ?? string.Empty,
-                partlyInstNames ?? string.Empty,
-                positionName ?? string.Empty,
-                positionId ?? string.Empty,
-                positionDetailId ?? string.Empty,
-                positionDetailName ?? string.Empty,
-                groupId ?? string.Empty,
-                groupsJson ?? string.Empty
-            });
-
-            using var md5 = MD5.Create();
-            var bytes = Encoding.UTF8.GetBytes(raw);
-            var hash = md5.ComputeHash(bytes);
-            return Convert.ToHexString(hash);
-        }
 
         public async Task SyncAllRegions()
         {
@@ -191,54 +128,9 @@ namespace PordznakanAPI.Controllers
                 summary.AllStaffUpdated.AddRange(result.StaffUpdatedList);
             }
 
-            await SaveChangesToJsonFile(summary);
-
             _logger?.LogInformation($"NmuhStaff sync completed for all regions. " +
                 $"Success: {summary.SuccessfulRegions}/{regionIds.Length}. " +
                 $"Total - Staff: {summary.TotalStaffAdded} added, {summary.TotalStaffUpdated} updated.");
-        }
-
-        public NmuhStaffChangedEntitiesDto GetChangedStaff(List<NmuhStaffSyncResult> results)
-        {
-            var dto = new NmuhStaffChangedEntitiesDto();
-
-            foreach (var result in results.Where(r => r.Success))
-            {
-                dto.StaffUpdated.AddRange(result.StaffUpdatedList);
-            }
-
-            return dto;
-        }
-
-        private async Task SaveChangesToJsonFile(NmuhStaffSyncSummaryDto summary)
-        {
-            try
-            {
-                var json = JsonConvert.SerializeObject(summary, Formatting.Indented, new JsonSerializerSettings
-                {
-                    NullValueHandling = NullValueHandling.Ignore,
-                    DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffZ"
-                });
-
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "NmuhStaffSyncReports");
-                if (!Directory.Exists(reportsDirectory))
-                {
-                    Directory.CreateDirectory(reportsDirectory);
-                }
-
-                var fileName = $"nmuh-staff-sync-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
-                var filePath = Path.Combine(reportsDirectory, fileName);
-                await System.IO.File.WriteAllTextAsync(filePath, json);
-
-                var latestFilePath = Path.Combine(reportsDirectory, "nmuh-staff-sync-latest.json");
-                await System.IO.File.WriteAllTextAsync(latestFilePath, json);
-
-                _logger?.LogInformation($"NmuhStaff sync changes saved to: {filePath}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to save NmuhStaff sync summary");
-            }
         }
 
         private async Task<NmuhStaffSyncResult> SyncRegionInternal(int regionId)
@@ -312,14 +204,14 @@ namespace PordznakanAPI.Controllers
                     }
 
                     // Compute MD5
-                    var md5 = ComputeNmuhStaffMd5(
+                    var md5 = SyncHelpers.ComputeMd5(
                         staffIdStr,
                         instId,
                         instName,
                         firstName,
                         lastName,
                         fatherName,
-                        dateOfBirth,
+                        dateOfBirth.ToString("yyyy-MM-dd"),
                         socNumber,
                         sex,
                         address,
@@ -346,6 +238,7 @@ namespace PordznakanAPI.Controllers
                         Id = Guid.NewGuid(),
                         NmuhStaffId = staffIdStr,
                         InstId = instId,
+                        RegionId = regionId,
                         InstName = instName,
                         FirstName = firstName,
                         LastName = lastName,
@@ -403,6 +296,7 @@ namespace PordznakanAPI.Controllers
                         {
                             // MD5 changed → update from staging
                             existing.InstId = staging.InstId;
+                            existing.RegionId = staging.RegionId;
                             existing.InstName = staging.InstName;
                             existing.FirstName = staging.FirstName;
                             existing.LastName = staging.LastName;
@@ -442,6 +336,7 @@ namespace PordznakanAPI.Controllers
                             Id = Guid.NewGuid(),
                             NmuhStaffId = staging.NmuhStaffId,
                             InstId = staging.InstId,
+                            RegionId = staging.RegionId,
                             InstName = staging.InstName,
                             FirstName = staging.FirstName,
                             LastName = staging.LastName,
@@ -538,16 +433,12 @@ namespace PordznakanAPI.Controllers
         {
             try
             {
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "NmuhStaffSyncReports");
-                var latestFilePath = Path.Combine(reportsDirectory, "nmuh-staff-sync-latest.json");
+                var summary = _syncReportService.ReadLatestReport<NmuhStaffSyncSummaryDto>(
+                    "NmuhStaffSyncReports", "nmuh-staff-sync-latest.json");
 
-                if (!System.IO.File.Exists(latestFilePath))
-                {
+                if (summary == null)
                     return NotFound(new { message = "No NmuhStaff sync file found. Run a sync first." });
-                }
 
-                var jsonContent = System.IO.File.ReadAllText(latestFilePath);
-                var summary = JsonConvert.DeserializeObject<NmuhStaffSyncSummaryDto>(jsonContent);
                 return Ok(summary);
             }
             catch (Exception ex)
@@ -561,28 +452,13 @@ namespace PordznakanAPI.Controllers
         {
             try
             {
-                var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "NmuhStaffSyncReports");
-                var latestFilePath = Path.Combine(reportsDirectory, "nmuh-staff-sync-latest.json");
-
-                if (!System.IO.File.Exists(latestFilePath))
-                {
-                    return NotFound(new { message = "No NmuhStaff sync file found. Run a sync first." });
-                }
-
-                var jsonContent = System.IO.File.ReadAllText(latestFilePath);
-                var summary = JsonConvert.DeserializeObject<NmuhStaffSyncSummaryDto>(jsonContent);
+                var summary = _syncReportService.ReadLatestReport<NmuhStaffSyncSummaryDto>(
+                    "NmuhStaffSyncReports", "nmuh-staff-sync-latest.json");
 
                 if (summary == null)
-                {
-                    return NotFound(new { message = "Could not parse NmuhStaff sync file." });
-                }
+                    return NotFound(new { message = "No NmuhStaff sync file found. Run a sync first." });
 
-                var dto = new NmuhStaffChangedEntitiesDto
-                {
-                    StaffUpdated = summary.AllStaffUpdated
-                };
-
-                return Ok(dto);
+                return Ok(new NmuhStaffChangedEntitiesDto { StaffUpdated = summary.AllStaffUpdated });
             }
             catch (Exception ex)
             {

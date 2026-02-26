@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -22,11 +22,7 @@ namespace PordznakanAPI.Migrations
                     Method = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Sent = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Received = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Transferred = table.Column<bool>(type: "bit", nullable: false),
-                    TransferredAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    TransferError = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    Transferred = table.Column<bool>(type: "bit", nullable: false)
                 },
                 constraints: table =>
                 {
