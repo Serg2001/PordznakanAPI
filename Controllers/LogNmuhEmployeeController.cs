@@ -35,40 +35,47 @@ namespace PordznakanAPI.Controllers
         }
 
         public Task ProcessAllRegions() =>
-            _logTransferService.ProcessAllRegionsAsync(SourceBaseUrl, nameof(LogNmuhEmployee), MapToModel);
+            ProcessAllRegions(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)));
+
+        public Task ProcessAllRegions(DateOnly date) =>
+            _logTransferService.ProcessAllRegionsAsync(SourceBaseUrl, nameof(LogNmuhEmployee), date, MapToModel);
 
         [HttpPost("process/{regionId}")]
-        public async Task<IActionResult> ProcessRegion([FromRoute] int regionId)
+        public async Task<IActionResult> ProcessRegion(
+            [FromRoute] int regionId,
+            [FromQuery] DateOnly? date = null)
         {
+            var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
             try
             {
-                var logArray = await _logTransferService.FetchLogsForRegionAsync(SourceBaseUrl, regionId);
+                var logArray = await _logTransferService.FetchLogsForRegionAsync(SourceBaseUrl, regionId, targetDate);
                 var now = DateTime.UtcNow;
                 var logs = logArray.OfType<JObject>().Select(o => MapToModel(o, now)).ToList();
 
                 if (logs.Count == 0)
-                    return Ok(new { message = "No logs found", regionId });
+                    return Ok(new { message = "No logs found", regionId, date = targetDate });
 
                 await _logTransferService.SendBulkAsync(logs);
-                return Ok(new { message = "Logs sent to bulk-update API", regionId, count = logs.Count });
+                return Ok(new { message = "Logs sent to bulk-update API", regionId, date = targetDate, count = logs.Count });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message, regionId });
+                return StatusCode(500, new { error = ex.Message, regionId, date = targetDate });
             }
         }
 
         [HttpPost("process-all")]
-        public async Task<IActionResult> ProcessAll()
+        public async Task<IActionResult> ProcessAll([FromQuery] DateOnly? date = null)
         {
+            var targetDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
             try
             {
-                await ProcessAllRegions();
-                return Ok(new { message = "All regions processed and sent to bulk-update API" });
+                await ProcessAllRegions(targetDate);
+                return Ok(new { message = "All regions processed and sent to bulk-update API", date = targetDate });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message });
+                return StatusCode(500, new { error = ex.Message, date = targetDate });
             }
         }
     }

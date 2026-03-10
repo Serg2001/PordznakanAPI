@@ -15,10 +15,11 @@ namespace PordznakanAPI.Services
             _logger = logger;
         }
 
-        public async Task<JArray> FetchLogsForRegionAsync(string sourceBaseUrl, int regionId)
+        public async Task<JArray> FetchLogsForRegionAsync(string sourceBaseUrl, int regionId, DateOnly date)
         {
             using var client = new HttpClient();
-            var response = await client.GetAsync($"{sourceBaseUrl}/{regionId}");
+            var url = $"{sourceBaseUrl}/{regionId}/{date:yyyy-MM-dd}";
+            var response = await client.GetAsync(url);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -64,6 +65,7 @@ namespace PordznakanAPI.Services
         public async Task ProcessAllRegionsAsync<T>(
             string sourceBaseUrl,
             string logTypeName,
+            DateOnly date,
             Func<JObject, DateTime, T> mapper)
         {
             var allLogs = new List<T>();
@@ -72,8 +74,8 @@ namespace PordznakanAPI.Services
             {
                 try
                 {
-                    _logger.LogInformation("Fetching {LogType} logs for region {RegionId}...", logTypeName, regionId);
-                    var logArray = await FetchLogsForRegionAsync(sourceBaseUrl, regionId);
+                    _logger.LogInformation("Fetching {LogType} logs for region {RegionId} date {Date}...", logTypeName, regionId, date);
+                    var logArray = await FetchLogsForRegionAsync(sourceBaseUrl, regionId, date);
                     var now = DateTime.UtcNow;
 
                     foreach (var token in logArray)
