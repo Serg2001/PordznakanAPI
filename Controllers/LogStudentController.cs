@@ -34,9 +34,11 @@ namespace PordznakanAPI.Controllers
             };
         }
 
+        [NonAction]
         public Task ProcessAllRegions() =>
             ProcessAllRegions(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)));
 
+        [NonAction]
         public Task ProcessAllRegions(DateOnly date) =>
             _logTransferService.ProcessAllRegionsAsync(SourceBaseUrl, nameof(LogStudent), date, MapToModel);
 

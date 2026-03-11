@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PordznakanAPI.Models;
 
 namespace PordznakanAPI.Data
@@ -27,12 +27,7 @@ namespace PordznakanAPI.Data
         public DbSet<NmuhStudentStaging> NmuhStudentsStaging { get; set; }
         public DbSet<NmuhStaff> NmuhStaff { get; set; }
         public DbSet<NmuhStaffStaging> NmuhStaffStaging { get; set; }
-        public DbSet<LogEmployee> LogEmployees { get; set; }
-        public DbSet<LogStudent> LogStudents { get; set; }
-        public DbSet<LogMmuhEmployee> LogMmuhEmployees { get; set; }
-        public DbSet<LogMmuhStudent> LogMmuhStudents { get; set; }
-        public DbSet<LogNmuhStudent> LogNmuhStudents { get; set; }
-        public DbSet<LogNmuhEmployee> LogNmuhEmployees { get; set; }
+        public DbSet<SchoolEmployee> SchoolEmployees { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -179,65 +174,19 @@ namespace PordznakanAPI.Data
             modelBuilder.Entity<NmuhStaffStaging>()
                 .HasKey(m => m.Id);
 
-            // Configure LogEmployee entity
-            modelBuilder.Entity<LogEmployee>()
-                .HasKey(l => l.Id);
+            // Configure SchoolEmployee entity
+            modelBuilder.Entity<SchoolEmployee>()
+                .HasKey(e => e.Id);
 
-            modelBuilder.Entity<LogEmployee>()
-                .HasIndex(l => l.LogId);
+            modelBuilder.Entity<SchoolEmployee>()
+                .HasIndex(e => e.PersonId);
 
-            modelBuilder.Entity<LogEmployee>()
-                .HasIndex(l => l.SchoolId);
+            modelBuilder.Entity<SchoolEmployee>()
+                .HasIndex(e => e.SchoolId);
 
-            // Configure LogStudent entity
-            modelBuilder.Entity<LogStudent>()
-                .HasKey(l => l.Id);
+            modelBuilder.Entity<SchoolEmployee>()
+                .HasIndex(e => e.RegionId);
 
-            modelBuilder.Entity<LogStudent>()
-                .HasIndex(l => l.LogId);
-
-            modelBuilder.Entity<LogStudent>()
-                .HasIndex(l => l.SchoolId);
-
-            // Configure LogMmuhEmployee entity
-            modelBuilder.Entity<LogMmuhEmployee>()
-                .HasKey(l => l.Id);
-
-            modelBuilder.Entity<LogMmuhEmployee>()
-                .HasIndex(l => l.LogId);
-
-            modelBuilder.Entity<LogMmuhEmployee>()
-                .HasIndex(l => l.SchoolId);
-
-            // Configure LogMmuhStudent entity
-            modelBuilder.Entity<LogMmuhStudent>()
-                .HasKey(l => l.Id);
-
-            modelBuilder.Entity<LogMmuhStudent>()
-                .HasIndex(l => l.LogId);
-
-            modelBuilder.Entity<LogMmuhStudent>()
-                .HasIndex(l => l.SchoolId);
-
-            // Configure LogNmuhStudent entity
-            modelBuilder.Entity<LogNmuhStudent>()
-                .HasKey(l => l.Id);
-
-            modelBuilder.Entity<LogNmuhStudent>()
-                .HasIndex(l => l.LogId);
-
-            modelBuilder.Entity<LogNmuhStudent>()
-                .HasIndex(l => l.SchoolId);
-
-            // Configure LogNmuhEmployee entity
-            modelBuilder.Entity<LogNmuhEmployee>()
-                .HasKey(l => l.Id);
-
-            modelBuilder.Entity<LogNmuhEmployee>()
-                .HasIndex(l => l.LogId);
-
-            modelBuilder.Entity<LogNmuhEmployee>()
-                .HasIndex(l => l.SchoolId);
         }
     }
 }

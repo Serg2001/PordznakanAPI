@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -236,6 +236,7 @@ namespace PordznakanAPI.Controllers
         /// <summary>
         /// Syncs all 10 regions. This method is designed to be called by Hangfire.
         /// </summary>
+        [NonAction]
         public async Task SyncAllRegions()
         {
             var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };

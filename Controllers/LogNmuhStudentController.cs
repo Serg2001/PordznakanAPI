@@ -25,8 +25,8 @@ namespace PordznakanAPI.Controllers
 
             return new LogNmuhStudent
             {
-                LogId = logId,0
-                SchoolId = schoolIderj
+                LogId = logId,
+                SchoolId = schoolId,
                 ActionDate = actionDate == default ? fallbackDate : actionDate,
                 Method = o["method"]?.ToString() ?? string.Empty,
                 Sent = o["sent"]?.ToString() ?? string.Empty,
@@ -34,9 +34,11 @@ namespace PordznakanAPI.Controllers
             };
         }
 
+        [NonAction]
         public Task ProcessAllRegions() =>
             ProcessAllRegions(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)));
 
+        [NonAction]
         public Task ProcessAllRegions(DateOnly date) =>
             _logTransferService.ProcessAllRegionsAsync(SourceBaseUrl, nameof(LogNmuhStudent), date, MapToModel);
 

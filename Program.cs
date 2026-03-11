@@ -1,5 +1,6 @@
 using PordznakanAPI;
 using Microsoft.EntityFrameworkCore;
+using Scalar.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PordznakanAPI.Data;
@@ -83,6 +84,7 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.UseHttpsRedirection();
@@ -110,6 +112,13 @@ try
         "sync-teachers-all-regions-daily",
         controller => controller.SyncAllRegions(),
         "1 15 * * *", // 00:01 Armenia time
+        new RecurringJobOptions { TimeZone = timezone });
+
+    // SchoolEmployee sync job
+    RecurringJob.AddOrUpdate<SchoolEmployeeController>(
+        "sync-school-employees-all-regions-daily",
+        controller => controller.SyncAllRegions(),
+        "55 19 * * *", // 23:55 Armenia time (just before midnight)
         new RecurringJobOptions { TimeZone = timezone });
     
     // MmuhStudent sync job
@@ -197,6 +206,13 @@ catch (TimeZoneNotFoundException)
         "sync-teachers-all-regions-daily",
         controller => controller.SyncAllRegions(),
         "1 20 * * *", // 20:01 UTC = 00:01 Armenia time (UTC+4)
+        TimeZoneInfo.Utc);
+
+    // SchoolEmployee sync job
+    RecurringJob.AddOrUpdate<SchoolEmployeeController>(
+        "sync-school-employees-all-regions-daily",
+        controller => controller.SyncAllRegions(),
+        "55 19 * * *", // 19:55 UTC = 23:55 Armenia time (UTC+4)
         TimeZoneInfo.Utc);
     
     // MmuhStudent sync job

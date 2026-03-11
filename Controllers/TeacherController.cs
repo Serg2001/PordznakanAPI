@@ -227,6 +227,7 @@ namespace PordznakanAPI.Controllers
         /// <summary>
         /// Syncs all 10 regions. This method is designed to be called by Hangfire.
         /// </summary>
+        [NonAction]
         public async Task SyncAllRegions()
         {
             var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -986,7 +987,7 @@ namespace PordznakanAPI.Controllers
         }
 
         [HttpPost("sync/{regionId?}")]
-        public async Task<IActionResult> SyncTeachers([FromRoute] int regionId = 1)
+        public async Task<IActionResult> SyncTeachers([FromRoute] int regionId)
         {
             var result = await SyncRegionInternal(regionId);
 
