@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Enums;
+using PordznakanAPI.Models;
 
 namespace PordznakanAPI.Controllers
 {
@@ -343,6 +344,593 @@ namespace PordznakanAPI.Controllers
             return Ok(pupil);
         }
 
-        
+        // ── Classroom endpoints ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all classrooms for the given region.
+        /// </summary>
+        [HttpGet("classrooms/by-region/{regionId}")]
+        public async Task<IActionResult> GetClassroomsByRegion([FromRoute] int regionId)
+        {
+            var classrooms = await _context.Classrooms
+                .Where(c => c.RegionId == regionId)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.KtakSchoolId,
+                    c.KtakClassroomId,
+                    c.RegionId,
+                    c.Grade,
+                    c.Classifier,
+                    c.ClassName,
+                    c.Stream,
+                    c.SchoolId,
+                    c.CreatedAt,
+                    c.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(classrooms);
+        }
+
+        // ── MmuhStudent endpoints ────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all MMUH students for the given region.
+        /// </summary>
+        [HttpGet("mmuh-students/by-region/{regionId}")]
+        public async Task<IActionResult> GetMmuhStudentsByRegion([FromRoute] int regionId)
+        {
+            var students = await _context.MmuhStudents
+                .Where(s => s.RegionId == regionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.MmuhStudentId,
+                    s.MmuhSchoolId,
+                    s.RegionId,
+                    s.SchoolName,
+                    s.Marz,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Graduated,
+                    s.GroupId,
+                    s.ClassroomGrade,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        // ── MmuhStaff endpoints ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all MMUH staff for the given region.
+        /// </summary>
+        [HttpGet("mmuh-staff/by-region/{regionId}")]
+        public async Task<IActionResult> GetMmuhStaffByRegion([FromRoute] int regionId)
+        {
+            var staff = await _context.MmuhStaff
+                .Where(s => s.RegionId == regionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.MmuhStaffId,
+                    s.InstId,
+                    s.RegionId,
+                    s.InstName,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Address,
+                    s.Phone,
+                    s.Citizenship,
+                    s.Nationality,
+                    s.IdentDocument,
+                    s.IdentDocumentNumber,
+                    s.FromCountry,
+                    s.InFiz,
+                    s.Druyq,
+                    s.PartlyIds,
+                    s.PartlyInstNames,
+                    s.PositionName,
+                    s.PositionId,
+                    s.PositionDetailId,
+                    s.PositionDetailName,
+                    s.GroupId,
+                    s.GroupsJson,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(staff);
+        }
+
+        // ── NmuhStudent endpoints ────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all NMUH students for the given region.
+        /// </summary>
+        [HttpGet("nmuh-students/by-region/{regionId}")]
+        public async Task<IActionResult> GetNmuhStudentsByRegion([FromRoute] int regionId)
+        {
+            var students = await _context.NmuhStudents
+                .Where(s => s.RegionId == regionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.NmuhStudentId,
+                    s.NmuhSchoolId,
+                    s.RegionId,
+                    s.SchoolName,
+                    s.Marz,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Graduated,
+                    s.EduYear,
+                    s.GroupId,
+                    s.ClassroomGrade,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        // ── NmuhStaff endpoints ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all NMUH staff for the given region.
+        /// </summary>
+        [HttpGet("nmuh-staff/by-region/{regionId}")]
+        public async Task<IActionResult> GetNmuhStaffByRegion([FromRoute] int regionId)
+        {
+            var staff = await _context.NmuhStaff
+                .Where(s => s.RegionId == regionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.NmuhStaffId,
+                    s.InstId,
+                    s.RegionId,
+                    s.InstName,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Address,
+                    s.Phone,
+                    s.Citizenship,
+                    s.Nationality,
+                    s.IdentDocument,
+                    s.IdentDocumentNumber,
+                    s.FromCountry,
+                    s.InFiz,
+                    s.Druyq,
+                    s.PartlyIds,
+                    s.PartlyInstNames,
+                    s.PositionName,
+                    s.PositionId,
+                    s.PositionDetailId,
+                    s.PositionDetailName,
+                    s.GroupId,
+                    s.GroupsJson,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(staff);
+        }
+
+        // ── SchoolEmployee endpoints ─────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all school employees for the given region.
+        /// </summary>
+        [HttpGet("school-employees/by-region/{regionId}")]
+        public async Task<IActionResult> GetSchoolEmployeesByRegion([FromRoute] int regionId)
+        {
+            var employees = await _context.SchoolEmployees
+                .Where(e => e.RegionId == regionId)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.PersonId,
+                    e.SchoolId,
+                    e.RegionId,
+                    e.FirstName,
+                    e.LastName,
+                    e.FatherName,
+                    e.Sex,
+                    e.SocNumber,
+                    e.DateOfBirth,
+                    e.Address,
+                    e.Phone,
+                    e.MainSubjectId,
+                    e.Position,
+                    e.StaffGroup,
+                    e.VacationId,
+                    e.CreatedAt,
+                    e.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(employees);
+        }
+
+        // ── Get by ID endpoints ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns a single school by its internal DshhSchoolId.
+        /// </summary>
+        [HttpGet("schools/{id:guid}")]
+        public async Task<IActionResult> GetSchoolById([FromRoute] Guid id)
+        {
+            var school = await _context.Schools
+                .Where(s => s.DshhSchoolId == id)
+                .Select(s => new SchoolDto
+                {
+                    DshhSchoolId = s.DshhSchoolId,
+                    KtakSchoolId = s.KtakSchoolId,
+                    RegionId     = s.RegionId,
+                    Name         = s.Name,
+                    Marz         = s.Marz,
+                    Region       = s.Region,
+                    Community    = s.Community,
+                    CreatedAt    = s.CreatedAt,
+                    UpdatedAt    = s.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (school == null)
+                return NotFound(new { message = $"School {id} not found." });
+
+            return Ok(school);
+        }
+
+        /// <summary>
+        /// Returns a single classroom by its Id.
+        /// </summary>
+        [HttpGet("classrooms/{id:guid}")]
+        public async Task<IActionResult> GetClassroomById([FromRoute] Guid id)
+        {
+            var classroom = await _context.Classrooms
+                .Where(c => c.Id == id)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.KtakSchoolId,
+                    c.KtakClassroomId,
+                    c.RegionId,
+                    c.Grade,
+                    c.Classifier,
+                    c.ClassName,
+                    c.Stream,
+                    c.SchoolId,
+                    c.CreatedAt,
+                    c.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (classroom == null)
+                return NotFound(new { message = $"Classroom {id} not found." });
+
+            return Ok(classroom);
+        }
+
+        /// <summary>
+        /// Returns a single pupil by its Id.
+        /// </summary>
+        [HttpGet("pupils/{id:guid}")]
+        public async Task<IActionResult> GetPupilById([FromRoute] Guid id)
+        {
+            var pupil = await _context.Pupils
+                .Where(p => p.Id == id)
+                .Select(p => new PupilDto
+                {
+                    Id                  = p.Id,
+                    KtakPupilId         = p.KtakPupilId,
+                    KtakSchoolId        = p.KtakSchoolId,
+                    RegionId            = p.RegionId,
+                    ClassroomId         = p.ClassroomId,
+                    ClassroomInternalId = p.ClassroomInternalId,
+                    Place               = p.Place,
+                    Grade               = p.Grade,
+                    SubGrade            = p.SubGrade,
+                    FirstName           = p.FirstName,
+                    LastName            = p.LastName,
+                    FatherName          = p.FatherName,
+                    CertificateType     = p.CertificateType,
+                    Certificate         = p.Certificate,
+                    Birthday            = p.Birthday,
+                    Gender              = p.Gender,
+                    Status              = p.Status,
+                    CreatedAt           = p.CreatedAt,
+                    UpdatedAt           = p.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (pupil == null)
+                return NotFound(new { message = $"Pupil {id} not found." });
+
+            return Ok(pupil);
+        }
+
+        /// <summary>
+        /// Returns a single teacher (with subjects) by its Id.
+        /// </summary>
+        [HttpGet("teachers/{id:guid}")]
+        public async Task<IActionResult> GetTeacherById([FromRoute] Guid id)
+        {
+            var teacher = await _context.Teachers
+                .Include(t => t.Subjects)
+                .Where(t => t.Id == id)
+                .Select(t => new
+                {
+                    t.Id,
+                    t.KtakTeacherId,
+                    t.KtakSchoolId,
+                    t.RegionId,
+                    t.Place,
+                    t.FirstName,
+                    t.LastName,
+                    t.FatherName,
+                    t.Gender,
+                    t.Birthday,
+                    t.Phone,
+                    t.Address,
+                    t.Email,
+                    t.SocNumber,
+                    t.Experience,
+                    t.AcademicRank,
+                    t.Education,
+                    t.CommandDate,
+                    t.DigitLevel,
+                    t.Activated,
+                    t.WorkType,
+                    t.CreatedAt,
+                    t.UpdatedAt,
+                    Subjects = t.Subjects.Select(s => new
+                    {
+                        s.Id,
+                        s.SubjectId,
+                        s.Grade,
+                        s.SubGrade,
+                        s.Name
+                    })
+                })
+                .FirstOrDefaultAsync();
+
+            if (teacher == null)
+                return NotFound(new { message = $"Teacher {id} not found." });
+
+            return Ok(teacher);
+        }
+
+        /// <summary>
+        /// Returns a single MMUH student by its Id.
+        /// </summary>
+        [HttpGet("mmuh-students/{id:guid}")]
+        public async Task<IActionResult> GetMmuhStudentById([FromRoute] Guid id)
+        {
+            var student = await _context.MmuhStudents
+                .Where(s => s.Id == id)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.MmuhStudentId,
+                    s.MmuhSchoolId,
+                    s.RegionId,
+                    s.SchoolName,
+                    s.Marz,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Graduated,
+                    s.GroupId,
+                    s.ClassroomGrade,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (student == null)
+                return NotFound(new { message = $"MmuhStudent {id} not found." });
+
+            return Ok(student);
+        }
+
+        /// <summary>
+        /// Returns a single MMUH staff member by its Id.
+        /// </summary>
+        [HttpGet("mmuh-staff/{id:guid}")]
+        public async Task<IActionResult> GetMmuhStaffById([FromRoute] Guid id)
+        {
+            var staff = await _context.MmuhStaff
+                .Where(s => s.Id == id)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.MmuhStaffId,
+                    s.InstId,
+                    s.RegionId,
+                    s.InstName,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Address,
+                    s.Phone,
+                    s.Citizenship,
+                    s.Nationality,
+                    s.IdentDocument,
+                    s.IdentDocumentNumber,
+                    s.FromCountry,
+                    s.InFiz,
+                    s.Druyq,
+                    s.PartlyIds,
+                    s.PartlyInstNames,
+                    s.PositionName,
+                    s.PositionId,
+                    s.PositionDetailId,
+                    s.PositionDetailName,
+                    s.GroupId,
+                    s.GroupsJson,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (staff == null)
+                return NotFound(new { message = $"MmuhStaff {id} not found." });
+
+            return Ok(staff);
+        }
+
+        /// <summary>
+        /// Returns a single NMUH student by its Id.
+        /// </summary>
+        [HttpGet("nmuh-students/{id:guid}")]
+        public async Task<IActionResult> GetNmuhStudentById([FromRoute] Guid id)
+        {
+            var student = await _context.NmuhStudents
+                .Where(s => s.Id == id)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.NmuhStudentId,
+                    s.NmuhSchoolId,
+                    s.RegionId,
+                    s.SchoolName,
+                    s.Marz,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Graduated,
+                    s.EduYear,
+                    s.GroupId,
+                    s.ClassroomGrade,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (student == null)
+                return NotFound(new { message = $"NmuhStudent {id} not found." });
+
+            return Ok(student);
+        }
+
+        /// <summary>
+        /// Returns a single NMUH staff member by its Id.
+        /// </summary>
+        [HttpGet("nmuh-staff/{id:guid}")]
+        public async Task<IActionResult> GetNmuhStaffById([FromRoute] Guid id)
+        {
+            var staff = await _context.NmuhStaff
+                .Where(s => s.Id == id)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.NmuhStaffId,
+                    s.InstId,
+                    s.RegionId,
+                    s.InstName,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Address,
+                    s.Phone,
+                    s.Citizenship,
+                    s.Nationality,
+                    s.IdentDocument,
+                    s.IdentDocumentNumber,
+                    s.FromCountry,
+                    s.InFiz,
+                    s.Druyq,
+                    s.PartlyIds,
+                    s.PartlyInstNames,
+                    s.PositionName,
+                    s.PositionId,
+                    s.PositionDetailId,
+                    s.PositionDetailName,
+                    s.GroupId,
+                    s.GroupsJson,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (staff == null)
+                return NotFound(new { message = $"NmuhStaff {id} not found." });
+
+            return Ok(staff);
+        }
+
+        /// <summary>
+        /// Returns a single school employee by its Id.
+        /// </summary>
+        [HttpGet("school-employees/{id:guid}")]
+        public async Task<IActionResult> GetSchoolEmployeeById([FromRoute] Guid id)
+        {
+            var employee = await _context.SchoolEmployees
+                .Where(e => e.Id == id)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.PersonId,
+                    e.SchoolId,
+                    e.RegionId,
+                    e.FirstName,
+                    e.LastName,
+                    e.FatherName,
+                    e.Sex,
+                    e.SocNumber,
+                    e.DateOfBirth,
+                    e.Address,
+                    e.Phone,
+                    e.MainSubjectId,
+                    e.Position,
+                    e.StaffGroup,
+                    e.VacationId,
+                    e.CreatedAt,
+                    e.UpdatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (employee == null)
+                return NotFound(new { message = $"SchoolEmployee {id} not found." });
+
+            return Ok(employee);
+        }
     }
 }
