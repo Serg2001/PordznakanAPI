@@ -325,7 +325,7 @@ namespace PordznakanAPI.Controllers
             try
             {
                 using var client = new HttpClient();
-                string url = $"https://api.emis.am/V1/getAllData/getAllData/{regionId}";
+                string url = $"https://api.emis.am/V1/getAllData/{regionId}";
                 var responseText = await client.GetStringAsync(url);
                 var json = JObject.Parse(responseText);
 
