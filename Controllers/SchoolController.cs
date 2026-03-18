@@ -325,7 +325,7 @@ namespace PordznakanAPI.Controllers
             try
             {
                 using var client = new HttpClient();
-                string url = $"https://crmapi.dshh.am/api/Integration/SendRequest?myUrl=V1/getAllData/{regionId}";
+                string url = $"https://api.emis.am/V1/getAllData/getAllData/{regionId}";
                 var responseText = await client.GetStringAsync(url);
                 var json = JObject.Parse(responseText);
 

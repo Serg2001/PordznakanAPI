@@ -303,7 +303,7 @@ namespace PordznakanAPI.Controllers
             try
             {
                 using var client = new HttpClient();
-                var url = $"https://crmapi.dshh.am/api/Integration/SendRequest?myUrl=v1/get_personnel/{regionId}";
+                var url = $"https://api.emis.am/V1/get_personnel/{regionId}";
                 _logger?.LogInformation($"[Region {regionId}] Fetching teachers from: {url}");
                 
                 var responseText = await client.GetStringAsync(url);
