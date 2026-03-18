@@ -1,4 +1,4 @@
-﻿namespace PordznakanAPI.Models
+namespace PordznakanAPI.Models
 {
     public class Employee
     {

@@ -3,7 +3,7 @@ namespace PordznakanAPI.DTOs
     public class ClassroomDto
     {
         public Guid Id { get; set; }
-        public string KtakSchoolId { get; set; } = string.Empty;
+        public int KtakSchoolId { get; set; }
         public string KtakClassroomId { get; set; } = string.Empty;
         public int RegionId { get; set; }
         public string Grade { get; set; } = string.Empty;

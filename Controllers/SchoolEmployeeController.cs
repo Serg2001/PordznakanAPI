@@ -123,7 +123,7 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
-            foreach (var regionId in Enumerable.Range(1, 10))
+            foreach (var regionId in Enumerable.Range(1, 11))
             {
                 try
                 {

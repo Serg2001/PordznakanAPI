@@ -10,7 +10,7 @@ namespace PordznakanAPI.Models
         public Guid Id { get; set; }
         public string NmuhStudentId { get; set; } = string.Empty;      // student_id from external API
         public string NmuhSchoolId { get; set; } = string.Empty;       // school_id from external API
-        public int RegionId { get; set; }                               // Region identifier (1-10)
+        public int RegionId { get; set; }                               // Region identifier (1-11)
         public string SchoolName { get; set; } = string.Empty;         // school_name
         public string Marz { get; set; } = string.Empty;               // marz (region)
         

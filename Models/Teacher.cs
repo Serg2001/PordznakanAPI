@@ -7,7 +7,7 @@ namespace PordznakanAPI.Models
         public Guid Id { get; set; }
         public int KtakTeacherId { get; set; }  // person_id from API
         public int KtakSchoolId { get; set; }   // school_id from API
-        public int RegionId { get; set; }       // Region identifier (1-10)
+        public int RegionId { get; set; }       // Region identifier (1-11)
         
         public KtakPlace Place { get; set; } = KtakPlace.School;
         

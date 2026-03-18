@@ -230,7 +230,7 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
-            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
             var results = new List<TeacherSyncResult>();
             var syncStartTime = DateTime.UtcNow;
 

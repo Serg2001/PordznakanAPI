@@ -3,7 +3,7 @@ namespace PordznakanAPI.DTOs
     public class SchoolChangeDto
     {
         public Guid DshhSchoolId { get; set; }
-        public string KtakSchoolId { get; set; } = string.Empty;
+        public int KtakSchoolId { get; set; }
         public int RegionId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Marz { get; set; } = string.Empty;
@@ -16,7 +16,7 @@ namespace PordznakanAPI.DTOs
     {
         public Guid Id { get; set; }
         public Guid SchoolId { get; set; }
-        public string KtakSchoolId { get; set; } = string.Empty;
+        public int KtakSchoolId { get; set; }
         public string KtakClassroomId { get; set; } = string.Empty;
         public string Grade { get; set; } = string.Empty;
         public string Classifier { get; set; } = string.Empty;
@@ -29,7 +29,7 @@ namespace PordznakanAPI.DTOs
     {
         public Guid Id { get; set; }
         public string KtakPupilId { get; set; } = string.Empty;
-        public string KtakSchoolId { get; set; } = string.Empty;
+        public int KtakSchoolId { get; set; }
         public string ClassroomId { get; set; } = string.Empty;
         public Guid? ClassroomInternalId { get; set; }
         public string FirstName { get; set; } = string.Empty;

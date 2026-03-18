@@ -239,7 +239,7 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
-            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+            var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
             var results = new List<SyncResult>();
             var syncStartTime = DateTime.UtcNow;
 
@@ -332,7 +332,7 @@ namespace PordznakanAPI.Controllers
                 // === Step 1: Collect all schools, classrooms, and pupils from JSON ===
                 var schoolsToProcess = new List<School>();
                 var classroomsToProcess = new List<Classroom>();
-                var schoolKtakIds = new HashSet<string>();
+                var schoolKtakIds = new HashSet<int>();
                 var classroomKeys = new HashSet<string>(); // KtakSchoolId-KtakClassroomId
 
                 // Clear staging table for this region
@@ -355,7 +355,8 @@ namespace PordznakanAPI.Controllers
                     if (schoolsIdToken == null || schoolsIdToken.Type == JTokenType.Null)
                         continue;
 
-                    string ktakSchoolId = schoolsIdToken.ToString();
+                    if (!int.TryParse(schoolsIdToken.ToString(), out var ktakSchoolId))
+                        continue;
                     schoolKtakIds.Add(ktakSchoolId);
 
                     // Parse date for timestamps
@@ -446,9 +447,6 @@ namespace PordznakanAPI.Controllers
                                                         if (!int.TryParse(pupilIdString, out var pupilId))
                                                             continue;
 
-                                                        // Parse school id to int
-                                                        int.TryParse(ktakSchoolId, out var ktakSchoolIdInt);
-
                                                         string identDocNumber = student["ident_document_number"]?.ToString() ?? "";
 
                                                         // Parse date of birth
@@ -473,7 +471,7 @@ namespace PordznakanAPI.Controllers
                                                         // Compute MD5 for this pupil
                                                         var md5 = ComputePupilMd5(
                                                             pupilId,
-                                                            ktakSchoolIdInt,
+                                                            ktakSchoolId,
                                                             ktakClassroomId,
                                                             KtakPlace.School,
                                                             gradeEnum,
@@ -492,7 +490,7 @@ namespace PordznakanAPI.Controllers
                                                         {
                                                             Id = Guid.NewGuid(),
                                                             KtakPupilId = pupilId,
-                                                            KtakSchoolId = ktakSchoolIdInt,
+                                                            KtakSchoolId = ktakSchoolId,
                                                             RegionId = regionId,
                                                             ClassroomId = ktakClassroomId,
                                                             ClassroomInternalId = null, // will be set after classrooms are saved
@@ -528,7 +526,7 @@ namespace PordznakanAPI.Controllers
                     .ToListAsync();
 
                 var existingSchoolsDict = existingSchools.ToDictionary(s => s.KtakSchoolId);
-                var schoolMapping = new Dictionary<string, Guid>(); // KtakSchoolId -> DshhSchoolId
+                var schoolMapping = new Dictionary<int, Guid>(); // KtakSchoolId -> DshhSchoolId
 
                 int schoolsAdded = 0;
                 int schoolsUpdated = 0;

@@ -1,14 +1,14 @@
-﻿namespace PordznakanAPI.Models
+namespace PordznakanAPI.Models
 {
     public class Classroom
     {
         public Guid Id { get; set; }
 
-        public string KtakSchoolId { get; set; } = string.Empty;
+        public int KtakSchoolId { get; set; }
 
         public string KtakClassroomId { get; set; } = string.Empty;
         
-        public int RegionId { get; set; }              // Region identifier (1-10)
+        public int RegionId { get; set; }              // Region identifier (1-11)
 
         public string Grade { get; set; } = string.Empty;
 

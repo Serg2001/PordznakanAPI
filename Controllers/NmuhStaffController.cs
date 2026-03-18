@@ -81,7 +81,7 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
-            var regionIds = Enumerable.Range(1, 10).ToArray();
+            var regionIds = Enumerable.Range(1, 11).ToArray();
             var results = new List<NmuhStaffSyncResult>();
 
             foreach (var regionId in regionIds)
