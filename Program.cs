@@ -179,6 +179,18 @@ try
         c => c.ProcessAllRegions(),
         "1 1 * * *",   // 01:01 Armenia
         new RecurringJobOptions { TimeZone = timezone });
+
+    RecurringJob.AddOrUpdate<MmuhInstitutionController>(
+        "sync-mmuh-institutions-daily",
+        c => c.SyncAllRegions(),
+        "6 1 * * *",   // 01:06 Armenia
+        new RecurringJobOptions { TimeZone = timezone });
+
+    RecurringJob.AddOrUpdate<NmuhInstitutionController>(
+        "sync-nmuh-institutions-daily",
+        c => c.SyncAllRegions(),
+        "11 1 * * *",  // 01:11 Armenia
+        new RecurringJobOptions { TimeZone = timezone });
 }
 catch (TimeZoneNotFoundException)
 {
@@ -260,6 +272,18 @@ catch (TimeZoneNotFoundException)
         "process-log-nmuh-employee-daily",
         c => c.ProcessAllRegions(),
         "1 21 * * *",  // 21:01 UTC = 01:01 Armenia
+        TimeZoneInfo.Utc);
+
+    RecurringJob.AddOrUpdate<MmuhInstitutionController>(
+        "sync-mmuh-institutions-daily",
+        c => c.SyncAllRegions(),
+        "6 21 * * *",  // 21:06 UTC = 01:06 Armenia
+        TimeZoneInfo.Utc);
+
+    RecurringJob.AddOrUpdate<NmuhInstitutionController>(
+        "sync-nmuh-institutions-daily",
+        c => c.SyncAllRegions(),
+        "11 21 * * *", // 21:11 UTC = 01:11 Armenia
         TimeZoneInfo.Utc);
 }
 

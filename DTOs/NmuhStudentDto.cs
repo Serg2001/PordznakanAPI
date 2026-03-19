@@ -5,8 +5,9 @@ namespace PordznakanAPI.DTOs
     public class NmuhStudentDto
     {
         public Guid Id { get; set; }
-        public string NmuhStudentId { get; set; } = string.Empty;
-        public string NmuhSchoolId { get; set; } = string.Empty;
+        public int NmuhStudentId { get; set; }
+        public int NmuhSchoolId { get; set; }
+        public Guid? InternalSchoolId { get; set; }
         public int RegionId { get; set; }
         public string SchoolName { get; set; } = string.Empty;
         public string Marz { get; set; } = string.Empty;

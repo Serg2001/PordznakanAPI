@@ -47,6 +47,7 @@ namespace PordznakanAPI.Controllers
                 Id = staff.Id,
                 NmuhStaffId = staff.NmuhStaffId,
                 InstId = staff.InstId,
+                InternalSchoolId = staff.InternalSchoolId,
                 RegionId = staff.RegionId,
                 InstName = staff.InstName,
                 FirstName = staff.FirstName,
@@ -160,11 +161,11 @@ namespace PordznakanAPI.Controllers
                     if (staffToken is not JObject staffObj)
                         continue;
 
-                    var staffIdStr = staffObj["staff_id"]?.ToString();
-                    if (string.IsNullOrWhiteSpace(staffIdStr))
+                    if (!int.TryParse(staffObj["staff_id"]?.ToString(), out var staffIdStr))
                         continue;
 
-                    var instId = staffObj["inst_id"]?.ToString() ?? string.Empty;
+                    if (!int.TryParse(staffObj["inst_id"]?.ToString(), out var instId))
+                        instId = 0;
                     var instName = staffObj["inst_name"]?.ToString() ?? string.Empty;
                     var firstName = staffObj["first_name"]?.ToString() ?? string.Empty;
                     var lastName = staffObj["last_name"]?.ToString() ?? string.Empty;
@@ -206,8 +207,8 @@ namespace PordznakanAPI.Controllers
 
                     // Compute MD5
                     var md5 = SyncHelpers.ComputeMd5(
-                        staffIdStr,
-                        instId,
+                        staffIdStr.ToString(),
+                        instId.ToString(),
                         instName,
                         firstName,
                         lastName,
@@ -239,6 +240,7 @@ namespace PordznakanAPI.Controllers
                         Id = Guid.NewGuid(),
                         NmuhStaffId = staffIdStr,
                         InstId = instId,
+                        InternalSchoolId = null,
                         RegionId = regionId,
                         InstName = instName,
                         FirstName = firstName,
@@ -276,6 +278,12 @@ namespace PordznakanAPI.Controllers
                 // Load all staged staff
                 var stagingRows = await _context.NmuhStaffStaging.ToListAsync();
 
+                // Build InstId → NmuhInstitution.Id lookup for InternalSchoolId resolution
+                var instIds = stagingRows.Select(s => s.InstId).Distinct().ToList();
+                var schoolLookup = await _context.NmuhInstitutions
+                    .Where(i => instIds.Contains(i.InstId))
+                    .ToDictionaryAsync(i => i.InstId, i => i.Id);
+
                 // Get existing staff by NmuhStaffId
                 var stagedIds = stagingRows.Select(s => s.NmuhStaffId).Distinct().ToList();
                 var existingStaff = await _context.NmuhStaff
@@ -297,6 +305,9 @@ namespace PordznakanAPI.Controllers
                         {
                             // MD5 changed → update from staging
                             existing.InstId = staging.InstId;
+                            existing.InternalSchoolId = schoolLookup.TryGetValue(staging.InstId, out var updatedSid)
+                                ? updatedSid
+                                : existing.InternalSchoolId;
                             existing.RegionId = staging.RegionId;
                             existing.InstName = staging.InstName;
                             existing.FirstName = staging.FirstName;
@@ -337,6 +348,9 @@ namespace PordznakanAPI.Controllers
                             Id = Guid.NewGuid(),
                             NmuhStaffId = staging.NmuhStaffId,
                             InstId = staging.InstId,
+                            InternalSchoolId = schoolLookup.TryGetValue(staging.InstId, out var newSid)
+                                ? newSid
+                                : null,
                             RegionId = staging.RegionId,
                             InstName = staging.InstName,
                             FirstName = staging.FirstName,

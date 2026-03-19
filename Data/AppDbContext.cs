@@ -28,6 +28,10 @@ namespace PordznakanAPI.Data
         public DbSet<NmuhStaff> NmuhStaff { get; set; }
         public DbSet<NmuhStaffStaging> NmuhStaffStaging { get; set; }
         public DbSet<SchoolEmployee> SchoolEmployees { get; set; }
+        public DbSet<MmuhInstitution> MmuhInstitutions { get; set; }
+        public DbSet<MmuhInstitutionStaging> MmuhInstitutionsStaging { get; set; }
+        public DbSet<NmuhInstitution> NmuhInstitutions { get; set; }
+        public DbSet<NmuhInstitutionStaging> NmuhInstitutionsStaging { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -186,6 +190,40 @@ namespace PordznakanAPI.Data
 
             modelBuilder.Entity<SchoolEmployee>()
                 .HasIndex(e => e.RegionId);
+
+            // Configure MmuhInstitution entity
+            modelBuilder.Entity<MmuhInstitution>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<MmuhInstitution>()
+                .HasIndex(m => m.InstId);
+
+            modelBuilder.Entity<MmuhInstitution>()
+                .HasIndex(m => m.RegionId);
+
+            // Configure MmuhInstitution staging entity (same schema, different table)
+            modelBuilder.Entity<MmuhInstitutionStaging>()
+                .ToTable("MmuhInstitutionsStaging");
+
+            modelBuilder.Entity<MmuhInstitutionStaging>()
+                .HasKey(m => m.Id);
+
+            // Configure NmuhInstitution entity
+            modelBuilder.Entity<NmuhInstitution>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<NmuhInstitution>()
+                .HasIndex(m => m.InstId);
+
+            modelBuilder.Entity<NmuhInstitution>()
+                .HasIndex(m => m.RegionId);
+
+            // Configure NmuhInstitution staging entity (same schema, different table)
+            modelBuilder.Entity<NmuhInstitutionStaging>()
+                .ToTable("NmuhInstitutionsStaging");
+
+            modelBuilder.Entity<NmuhInstitutionStaging>()
+                .HasKey(m => m.Id);
 
         }
     }

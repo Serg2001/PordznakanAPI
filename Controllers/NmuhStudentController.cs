@@ -48,6 +48,7 @@ namespace PordznakanAPI.Controllers
                 Id = student.Id,
                 NmuhStudentId = student.NmuhStudentId,
                 NmuhSchoolId = student.NmuhSchoolId,
+                InternalSchoolId = student.InternalSchoolId,
                 RegionId = student.RegionId,
                 SchoolName = student.SchoolName,
                 Marz = student.Marz,
@@ -149,11 +150,11 @@ namespace PordznakanAPI.Controllers
                     if (studentToken is not JObject studentObj)
                         continue;
 
-                    var studentIdStr = studentObj["student_id"]?.ToString();
-                    if (string.IsNullOrWhiteSpace(studentIdStr))
+                    if (!int.TryParse(studentObj["student_id"]?.ToString(), out var studentIdStr))
                         continue;
 
-                    var schoolIdStr = studentObj["school_id"]?.ToString() ?? string.Empty;
+                    if (!int.TryParse(studentObj["school_id"]?.ToString(), out var schoolIdStr))
+                        schoolIdStr = 0;
                     var schoolName = studentObj["school_name"]?.ToString() ?? string.Empty;
                     var marz = studentObj["marz"]?.ToString() ?? string.Empty;
                     var firstName = studentObj["first_name"]?.ToString() ?? string.Empty;
@@ -180,8 +181,8 @@ namespace PordznakanAPI.Controllers
 
                     // Compute MD5
                     var md5 = SyncHelpers.ComputeMd5(
-                        studentIdStr,
-                        schoolIdStr,
+                        studentIdStr.ToString(),
+                        schoolIdStr.ToString(),
                         schoolName,
                         marz,
                         firstName,
@@ -201,6 +202,7 @@ namespace PordznakanAPI.Controllers
                         Id = Guid.NewGuid(),
                         NmuhStudentId = studentIdStr,
                         NmuhSchoolId = schoolIdStr,
+                        InternalSchoolId = null,
                         RegionId = regionId,
                         SchoolName = schoolName,
                         Marz = marz,
@@ -226,6 +228,12 @@ namespace PordznakanAPI.Controllers
                 // Load all staged students
                 var stagingRows = await _context.NmuhStudentsStaging.ToListAsync();
 
+                // Build NmuhSchoolId → NmuhInstitution.Id lookup for InternalSchoolId resolution
+                var schoolIds = stagingRows.Select(s => s.NmuhSchoolId).Distinct().ToList();
+                var schoolLookup = await _context.NmuhInstitutions
+                    .Where(i => schoolIds.Contains(i.InstId))
+                    .ToDictionaryAsync(i => i.InstId, i => i.Id);
+
                 // Get existing students by NmuhStudentId
                 var stagedIds = stagingRows.Select(s => s.NmuhStudentId).Distinct().ToList();
                 var existingStudents = await _context.NmuhStudents
@@ -247,6 +255,9 @@ namespace PordznakanAPI.Controllers
                         {
                             // MD5 changed → update from staging
                             existing.NmuhSchoolId = staging.NmuhSchoolId;
+                            existing.InternalSchoolId = schoolLookup.TryGetValue(staging.NmuhSchoolId, out var updatedSid)
+                                ? updatedSid
+                                : existing.InternalSchoolId;
                             existing.RegionId = staging.RegionId;
                             existing.SchoolName = staging.SchoolName;
                             existing.Marz = staging.Marz;
@@ -275,6 +286,9 @@ namespace PordznakanAPI.Controllers
                             Id = Guid.NewGuid(),
                             NmuhStudentId = staging.NmuhStudentId,
                             NmuhSchoolId = staging.NmuhSchoolId,
+                            InternalSchoolId = schoolLookup.TryGetValue(staging.NmuhSchoolId, out var newSid)
+                                ? newSid
+                                : null,
                             RegionId = staging.RegionId,
                             SchoolName = staging.SchoolName,
                             Marz = staging.Marz,

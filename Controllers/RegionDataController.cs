@@ -373,6 +373,34 @@ namespace PordznakanAPI.Controllers
             return Ok(classrooms);
         }
 
+        // ── MmuhInstitution endpoints ────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all MMUH institutions for the given region.
+        /// </summary>
+        [HttpGet("mmuh-institutions/by-region/{regionId}")]
+        public async Task<IActionResult> GetMmuhInstitutionsByRegion([FromRoute] int regionId)
+        {
+            var institutions = await _context.MmuhInstitutions
+                .Where(i => i.RegionId == regionId)
+                .Select(i => new
+                {
+                    i.Id,
+                    i.InstId,
+                    i.RegionId,
+                    i.Name,
+                    i.LegalMarzId,
+                    i.LegalAddress,
+                    i.BusinessMarzId,
+                    i.BusinessAddress,
+                    i.CreatedAt,
+                    i.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(institutions);
+        }
+
         // ── MmuhStudent endpoints ────────────────────────────────────────────
 
         /// <summary>
@@ -388,6 +416,40 @@ namespace PordznakanAPI.Controllers
                     s.Id,
                     s.MmuhStudentId,
                     s.MmuhSchoolId,
+                    s.RegionId,
+                    s.SchoolName,
+                    s.Marz,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Graduated,
+                    s.GroupId,
+                    s.ClassroomGrade,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        /// <summary>
+        /// Returns all MMUH students that belong to the given institution (by InstId).
+        /// </summary>
+        [HttpGet("mmuh-students/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMmuhStudentsByInstitution([FromRoute] int institutionId)
+        {
+            var students = await _context.MmuhStudents
+                .Where(s => s.MmuhSchoolId == institutionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.MmuhStudentId,
+                    s.MmuhSchoolId,
+                    s.InternalSchoolId,
                     s.RegionId,
                     s.SchoolName,
                     s.Marz,
@@ -456,6 +518,81 @@ namespace PordznakanAPI.Controllers
             return Ok(staff);
         }
 
+        /// <summary>
+        /// Returns all MMUH staff that belong to the given institution (by InstId).
+        /// </summary>
+        [HttpGet("mmuh-staff/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMmuhStaffByInstitution([FromRoute] int institutionId)
+        {
+            var staff = await _context.MmuhStaff
+                .Where(s => s.InstId == institutionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.MmuhStaffId,
+                    s.InstId,
+                    s.InternalSchoolId,
+                    s.RegionId,
+                    s.InstName,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Address,
+                    s.Phone,
+                    s.Citizenship,
+                    s.Nationality,
+                    s.IdentDocument,
+                    s.IdentDocumentNumber,
+                    s.FromCountry,
+                    s.InFiz,
+                    s.Druyq,
+                    s.PartlyIds,
+                    s.PartlyInstNames,
+                    s.PositionName,
+                    s.PositionId,
+                    s.PositionDetailId,
+                    s.PositionDetailName,
+                    s.GroupId,
+                    s.GroupsJson,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(staff);
+        }
+
+        // ── NmuhInstitution endpoints ────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all NMUH institutions for the given region.
+        /// </summary>
+        [HttpGet("nmuh-institutions/by-region/{regionId}")]
+        public async Task<IActionResult> GetNmuhInstitutionsByRegion([FromRoute] int regionId)
+        {
+            var institutions = await _context.NmuhInstitutions
+                .Where(i => i.RegionId == regionId)
+                .Select(i => new
+                {
+                    i.Id,
+                    i.InstId,
+                    i.RegionId,
+                    i.Name,
+                    i.LegalMarzId,
+                    i.LegalAddress,
+                    i.BusinessMarzId,
+                    i.BusinessAddress,
+                    i.CreatedAt,
+                    i.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(institutions);
+        }
+
         // ── NmuhStudent endpoints ────────────────────────────────────────────
 
         /// <summary>
@@ -492,6 +629,41 @@ namespace PordznakanAPI.Controllers
             return Ok(students);
         }
 
+        /// <summary>
+        /// Returns all NMUH students that belong to the given institution (by InstId).
+        /// </summary>
+        [HttpGet("nmuh-students/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetNmuhStudentsByInstitution([FromRoute] int institutionId)
+        {
+            var students = await _context.NmuhStudents
+                .Where(s => s.NmuhSchoolId == institutionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.NmuhStudentId,
+                    s.NmuhSchoolId,
+                    s.InternalSchoolId,
+                    s.RegionId,
+                    s.SchoolName,
+                    s.Marz,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Graduated,
+                    s.EduYear,
+                    s.GroupId,
+                    s.ClassroomGrade,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
         // ── NmuhStaff endpoints ──────────────────────────────────────────────
 
         /// <summary>
@@ -507,6 +679,53 @@ namespace PordznakanAPI.Controllers
                     s.Id,
                     s.NmuhStaffId,
                     s.InstId,
+                    s.RegionId,
+                    s.InstName,
+                    s.FirstName,
+                    s.LastName,
+                    s.FatherName,
+                    s.DateOfBirth,
+                    s.SocNumber,
+                    s.Sex,
+                    s.Address,
+                    s.Phone,
+                    s.Citizenship,
+                    s.Nationality,
+                    s.IdentDocument,
+                    s.IdentDocumentNumber,
+                    s.FromCountry,
+                    s.InFiz,
+                    s.Druyq,
+                    s.PartlyIds,
+                    s.PartlyInstNames,
+                    s.PositionName,
+                    s.PositionId,
+                    s.PositionDetailId,
+                    s.PositionDetailName,
+                    s.GroupId,
+                    s.GroupsJson,
+                    s.CreatedAt,
+                    s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(staff);
+        }
+
+        /// <summary>
+        /// Returns all NMUH staff that belong to the given institution (by InstId).
+        /// </summary>
+        [HttpGet("nmuh-staff/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetNmuhStaffByInstitution([FromRoute] int institutionId)
+        {
+            var staff = await _context.NmuhStaff
+                .Where(s => s.InstId == institutionId)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.NmuhStaffId,
+                    s.InstId,
+                    s.InternalSchoolId,
                     s.RegionId,
                     s.InstName,
                     s.FirstName,
