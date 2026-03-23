@@ -40,6 +40,65 @@ namespace PordznakanAPI.Controllers
             _logger = logger;
         }
 
+        private static bool ParseSex(string? raw)
+            => raw?.Trim() == "1";
+
+        private static List<int> ParseGroupIds(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return new();
+            var result = new List<int>();
+            foreach (var part in raw.Split(','))
+            {
+                if (int.TryParse(part.Trim(), out var id))
+                    result.Add(id);
+            }
+            return result;
+        }
+
+        private static List<MmuhStaffGroup> ParseGroups(string? groupsJson, Guid staffId)
+        {
+            if (string.IsNullOrWhiteSpace(groupsJson)) return new();
+            try
+            {
+                var arr = JArray.Parse(groupsJson);
+                var groups = new List<MmuhStaffGroup>();
+                foreach (var token in arr)
+                {
+                    if (token is not JObject obj) continue;
+                    if (!int.TryParse(obj["group_id"]?.ToString(), out var gid)) continue;
+
+                    var subjects = new List<MmuhSubject>();
+                    if (obj["subjects"] is JArray subArr)
+                    {
+                        foreach (var sub in subArr)
+                        {
+                            if (sub is not JObject subObj) continue;
+                            if (!int.TryParse(subObj["subject_id"]?.ToString(), out var sid)) continue;
+                            subjects.Add(new MmuhSubject
+                            {
+                                Id = Guid.NewGuid(),
+                                SubjectId = sid,
+                                SubjectName = subObj["subject"]?.ToString() ?? string.Empty,
+                                SubjectType = subObj["subject_type"]?.ToString() ?? string.Empty,
+                                SubjectTypeId = int.TryParse(subObj["subject_type_id"]?.ToString(), out var stid) ? stid : 0
+                            });
+                        }
+                    }
+
+                    groups.Add(new MmuhStaffGroup
+                    {
+                        Id = Guid.NewGuid(),
+                        MmuhStaffId = staffId,
+                        GroupId = gid,
+                        GroupName = obj["group"]?.ToString() ?? string.Empty,
+                        Subjects = subjects
+                    });
+                }
+                return groups;
+            }
+            catch { return new(); }
+        }
+
         private MmuhStaffDto MapToMmuhStaffDto(MmuhStaff staff)
         {
             return new MmuhStaffDto
@@ -71,8 +130,19 @@ namespace PordznakanAPI.Controllers
                 PositionId = staff.PositionId,
                 PositionDetailId = staff.PositionDetailId,
                 PositionDetailName = staff.PositionDetailName,
-                GroupId = staff.GroupId,
-                GroupsJson = staff.GroupsJson,
+                GroupIds = staff.GroupIds,
+                Groups = staff.Groups.Select(g => new MmuhStaffGroupDto
+                {
+                    GroupId = g.GroupId,
+                    GroupName = g.GroupName,
+                    Subjects = g.Subjects.Select(s => new MmuhSubjectDto
+                    {
+                        SubjectId = s.SubjectId,
+                        SubjectName = s.SubjectName,
+                        SubjectType = s.SubjectType,
+                        SubjectTypeId = s.SubjectTypeId
+                    }).ToList()
+                }).ToList(),
                 CreatedAt = staff.CreatedAt,
                 UpdatedAt = staff.UpdatedAt
             };
@@ -171,7 +241,6 @@ namespace PordznakanAPI.Controllers
                     var lastName = staffObj["last_name"]?.ToString() ?? string.Empty;
                     var fatherName = staffObj["father_name"]?.ToString() ?? string.Empty;
                     var socNumber = staffObj["soc_number"]?.ToString() ?? string.Empty;
-                    var sex = staffObj["sex"]?.ToString() ?? string.Empty;
                     var address = staffObj["address"]?.ToString() ?? string.Empty;
                     var phone = staffObj["phone"]?.ToString() ?? string.Empty;
                     var citizenship = staffObj["citizenship"]?.ToString() ?? string.Empty;
@@ -187,7 +256,8 @@ namespace PordznakanAPI.Controllers
                     var positionId = staffObj["position_id"]?.ToString() ?? string.Empty;
                     var positionDetailId = staffObj["position_detail_id"]?.ToString() ?? string.Empty;
                     var positionDetailName = staffObj["position_detail_name"]?.ToString() ?? string.Empty;
-                    var groupId = staffObj["group_id"]?.ToString() ?? string.Empty;
+                    var sexRaw = staffObj["sex"]?.ToString() ?? string.Empty;
+                    var groupIdRaw = staffObj["group_id"]?.ToString() ?? string.Empty;
 
                     // Parse date of birth
                     DateOnly dateOfBirth = default;
@@ -205,7 +275,7 @@ namespace PordznakanAPI.Controllers
                         groupsJson = groupsToken.ToString(Formatting.None);
                     }
 
-                    // Compute MD5
+                    // Compute MD5 using raw strings
                     var md5 = SyncHelpers.ComputeMd5(
                         staffIdStr.ToString(),
                         instId.ToString(),
@@ -215,7 +285,7 @@ namespace PordznakanAPI.Controllers
                         fatherName,
                         dateOfBirth.ToString("yyyy-MM-dd"),
                         socNumber,
-                        sex,
+                        sexRaw,
                         address,
                         phone,
                         citizenship,
@@ -231,7 +301,7 @@ namespace PordznakanAPI.Controllers
                         positionId,
                         positionDetailId,
                         positionDetailName,
-                        groupId,
+                        groupIdRaw,
                         groupsJson);
 
                     // Stream directly into staging table
@@ -248,7 +318,8 @@ namespace PordznakanAPI.Controllers
                         FatherName = fatherName,
                         DateOfBirth = dateOfBirth,
                         SocNumber = socNumber,
-                        Sex = sex,
+                        Sex = ParseSex(sexRaw),
+                        SexRaw = sexRaw,
                         Address = address,
                         Phone = phone,
                         Citizenship = citizenship,
@@ -264,7 +335,7 @@ namespace PordznakanAPI.Controllers
                         PositionId = positionId,
                         PositionDetailId = positionDetailId,
                         PositionDetailName = positionDetailName,
-                        GroupId = groupId,
+                        GroupId = groupIdRaw,
                         GroupsJson = groupsJson,
                         MD5 = md5,
                         CreatedAt = now,
@@ -287,6 +358,8 @@ namespace PordznakanAPI.Controllers
                 // Get existing staff by MmuhStaffId
                 var stagedIds = stagingRows.Select(s => s.MmuhStaffId).Distinct().ToList();
                 var existingStaff = await _context.MmuhStaff
+                    .Include(s => s.Groups)
+                        .ThenInclude(g => g.Subjects)
                     .Where(s => stagedIds.Contains(s.MmuhStaffId))
                     .ToListAsync();
 
@@ -331,10 +404,17 @@ namespace PordznakanAPI.Controllers
                             existing.PositionId = staging.PositionId;
                             existing.PositionDetailId = staging.PositionDetailId;
                             existing.PositionDetailName = staging.PositionDetailName;
-                            existing.GroupId = staging.GroupId;
-                            existing.GroupsJson = staging.GroupsJson;
+                            existing.GroupIds = ParseGroupIds(staging.GroupId);
                             existing.MD5 = staging.MD5;
                             existing.UpdatedAt = DateTime.UtcNow;
+
+                            // Replace related groups (cascade deletes subjects automatically)
+                            await _context.MmuhStaffGroups
+                                .Where(g => g.MmuhStaffId == existing.Id)
+                                .ExecuteDeleteAsync();
+                            var updatedGroups = ParseGroups(staging.GroupsJson, existing.Id);
+                            if (updatedGroups.Any())
+                                _context.MmuhStaffGroups.AddRange(updatedGroups);
 
                             updatedCount++;
                             result.StaffUpdatedList.Add(MapToMmuhStaffDto(existing));
@@ -343,9 +423,10 @@ namespace PordznakanAPI.Controllers
                     else
                     {
                         // New staff
+                        var newId = Guid.NewGuid();
                         var newStaffMember = new MmuhStaff
                         {
-                            Id = Guid.NewGuid(),
+                            Id = newId,
                             MmuhStaffId = staging.MmuhStaffId,
                             InstId = staging.InstId,
                             InternalSchoolId = schoolLookup.TryGetValue(staging.InstId, out var newSid)
@@ -374,8 +455,8 @@ namespace PordznakanAPI.Controllers
                             PositionId = staging.PositionId,
                             PositionDetailId = staging.PositionDetailId,
                             PositionDetailName = staging.PositionDetailName,
-                            GroupId = staging.GroupId,
-                            GroupsJson = staging.GroupsJson,
+                            GroupIds = ParseGroupIds(staging.GroupId),
+                            Groups = ParseGroups(staging.GroupsJson, newId),
                             MD5 = staging.MD5,
                             CreatedAt = staging.CreatedAt,
                             UpdatedAt = staging.UpdatedAt

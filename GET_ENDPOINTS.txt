@@ -1,0 +1,259 @@
+================================================================
+  ALL GET ENDPOINTS  –  PordznakanAPI
+================================================================
+
+Base URL: https://<host>/api
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RegionData  →  /api/RegionData
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+── Schools ─────────────────────────────────────────────────────
+GET /api/RegionData/schools/summary/by-region/{regionId}
+    Returns each school's DshhSchoolId, KtakSchoolId and Name for the region.
+
+GET /api/RegionData/schools/by-region/{regionId}
+    Returns all fields of every school in the region.
+
+GET /api/RegionData/schools/{id:guid}
+    Returns a single school by its internal DshhSchoolId.
+
+── Classrooms ──────────────────────────────────────────────────
+GET /api/RegionData/classrooms/by-region/{regionId}
+    Returns all classrooms for the region.
+
+GET /api/RegionData/classrooms/{id:guid}
+    Returns a single classroom by its internal Id.
+
+── Pupils ──────────────────────────────────────────────────────
+GET /api/RegionData/pupils/by-region/{regionId}
+    Returns all pupils for the region.
+
+GET /api/RegionData/pupils/by-school/{schoolId}
+    Returns all pupils for the given school (by KtakSchoolId).
+
+GET /api/RegionData/pupils/ids/by-school/{schoolId}
+    Returns only the internal Guid IDs of pupils for the given school.
+
+GET /api/RegionData/pupils/by-school/{schoolId}/{certNumber}
+    Returns FirstName, LastName, Grade and SubGrade for a pupil
+    identified by KtakSchoolId and certificate number.
+
+GET /api/RegionData/pupils/{id:guid}
+    Returns a single pupil by its internal Id.
+
+── Teachers ────────────────────────────────────────────────────
+GET /api/RegionData/teachers/by-region/{regionId}
+    Returns all teachers (with subjects) for the region.
+
+GET /api/RegionData/teachers/by-school/{schoolId}
+    Returns all teachers (with subjects) for the given school (by KtakSchoolId).
+
+GET /api/RegionData/teachers/summary/by-region/{regionId}
+    Returns FirstName, LastName, SocNumber and DigitLevel for every teacher in the region.
+
+GET /api/RegionData/teachers/summary/by-school/{schoolId}
+    Returns FirstName, LastName, SocNumber and DigitLevel for every teacher in the school.
+
+GET /api/RegionData/teachers/by-school/{schoolId}/{socNumber}
+    Returns FirstName, LastName, DigitLevel and Subjects for a teacher
+    identified by KtakSchoolId and SocNumber.
+
+GET /api/RegionData/teachers/{id:guid}
+    Returns a single teacher by its internal Id.
+
+── MMUH Institutions ───────────────────────────────────────────
+GET /api/RegionData/mmuh-institutions/by-region/{regionId}
+    Returns all MMUH institutions for the region.
+
+── MMUH Students ───────────────────────────────────────────────
+GET /api/RegionData/mmuh-students/by-region/{regionId}
+    Returns all MMUH students for the region.
+
+GET /api/RegionData/mmuh-students/by-institution/{institutionId}
+    Returns all MMUH students that belong to the given institution (by InstId).
+
+GET /api/RegionData/mmuh-students/{id:guid}
+    Returns a single MMUH student by its internal Id.
+
+── MMUH Staff ──────────────────────────────────────────────────
+GET /api/RegionData/mmuh-staff/by-region/{regionId}
+    Returns all MMUH staff for the region.
+
+GET /api/RegionData/mmuh-staff/by-institution/{institutionId}
+    Returns all MMUH staff that belong to the given institution (by InstId).
+
+GET /api/RegionData/mmuh-staff/{id:guid}
+    Returns a single MMUH staff member by its internal Id.
+
+── NMUH Institutions ───────────────────────────────────────────
+GET /api/RegionData/nmuh-institutions/by-region/{regionId}
+    Returns all NMUH institutions for the region.
+
+── NMUH Students ───────────────────────────────────────────────
+GET /api/RegionData/nmuh-students/by-region/{regionId}
+    Returns all NMUH students for the region.
+
+GET /api/RegionData/nmuh-students/by-institution/{institutionId}
+    Returns all NMUH students that belong to the given institution (by InstId).
+
+GET /api/RegionData/nmuh-students/{id:guid}
+    Returns a single NMUH student by its internal Id.
+
+── NMUH Staff ──────────────────────────────────────────────────
+GET /api/RegionData/nmuh-staff/by-region/{regionId}
+    Returns all NMUH staff for the region.
+
+GET /api/RegionData/nmuh-staff/by-institution/{institutionId}
+    Returns all NMUH staff that belong to the given institution (by InstId).
+
+GET /api/RegionData/nmuh-staff/{id:guid}
+    Returns a single NMUH staff member by its internal Id.
+
+── School Employees ────────────────────────────────────────────
+GET /api/RegionData/school-employees/by-region/{regionId}
+    Returns all school employees for the region.
+
+GET /api/RegionData/school-employees/{id:guid}
+    Returns a single school employee by its internal Id.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MmuhInstitution  →  /api/MmuhInstitution
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/MmuhInstitution/by-region/{regionId}
+    Returns all MMUH institutions for the region.
+
+GET /api/MmuhInstitution/{id:guid}
+    Returns a single MMUH institution by its internal Id.
+
+GET /api/MmuhInstitution/sync-changes/latest
+    Returns the latest MMUH institution sync report.
+
+GET /api/MmuhInstitution/changed-entities/latest
+    Returns the list of MMUH institutions updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NmuhInstitution  →  /api/NmuhInstitution
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/NmuhInstitution/by-region/{regionId}
+    Returns all NMUH institutions for the region.
+
+GET /api/NmuhInstitution/{id:guid}
+    Returns a single NMUH institution by its internal Id.
+
+GET /api/NmuhInstitution/sync-changes/latest
+    Returns the latest NMUH institution sync report.
+
+GET /api/NmuhInstitution/changed-entities/latest
+    Returns the list of NMUH institutions updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MmuhStudent  →  /api/MmuhStudent
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/MmuhStudent/sync-changes/latest
+    Returns the latest MMUH student sync report.
+
+GET /api/MmuhStudent/changed-entities/latest
+    Returns the list of MMUH students updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MmuhStaff  →  /api/MmuhStaff
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/MmuhStaff/sync-changes/latest
+    Returns the latest MMUH staff sync report.
+
+GET /api/MmuhStaff/changed-entities/latest
+    Returns the list of MMUH staff updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NmuhStudent  →  /api/NmuhStudent
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/NmuhStudent/sync-changes/latest
+    Returns the latest NMUH student sync report.
+
+GET /api/NmuhStudent/changed-entities/latest
+    Returns the list of NMUH students updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NmuhStaff  →  /api/NmuhStaff
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/NmuhStaff/sync-changes/latest
+    Returns the latest NMUH staff sync report.
+
+GET /api/NmuhStaff/changed-entities/latest
+    Returns the list of NMUH staff updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  School  →  /api/School
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/School/sync-changes/latest
+    Returns the latest school sync report.
+
+GET /api/School/sync-changes/files
+    Returns a list of all saved school sync report files.
+
+GET /api/School/changed-entities/latest
+    Returns the list of schools updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Teacher  →  /api/Teacher
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/Teacher/sync-changes/latest
+    Returns the latest teacher sync report.
+
+GET /api/Teacher/changed-entities/latest
+    Returns the list of teachers updated in the latest sync.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SchoolEmployee  →  /api/SchoolEmployee
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GET /api/SchoolEmployee/by-region/{regionId}
+    Returns all school employees for the region.
+
+GET /api/SchoolEmployee/by-school/{schoolId}
+    Returns all school employees for the given school.
+
+
+================================================================
+  REGION IDs  (used in regionId parameter)
+================================================================
+  1  – Yerevan
+  2  – Aragatsotn
+  3  – Ararat
+  4  – Armavir
+  5  – Gegharkunik
+  6  – Lori
+  7  – Kotayk
+  8  – Shirak
+  9  – Syunik
+  10 – Vayots Dzor
+  11 – Tavush
+
+================================================================
+  EF CORE MIGRATION COMMANDS  (run in project root)
+================================================================
+
+  -- Create a new migration:
+  dotnet ef migrations add <MigrationName>
+
+  -- Apply pending migrations to the database:
+  dotnet ef database update
+
+  -- Revert to a specific migration:
+  dotnet ef database update <MigrationName>
+
+  -- Remove the last unapplied migration:
+  dotnet ef migrations remove
+
+  -- List all migrations:
+  dotnet ef migrations list

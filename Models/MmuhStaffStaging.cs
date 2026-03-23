@@ -18,7 +18,8 @@ namespace PordznakanAPI.Models
         
         public DateOnly DateOfBirth { get; set; }                          // date_of_birth
         public string SocNumber { get; set; } = string.Empty;              // soc_number
-        public string Sex { get; set; } = string.Empty;                    // sex (stored as string to preserve original value)
+        public bool Sex { get; set; }                                          // sex: true = male (1), false = female (0)
+        public string SexRaw { get; set; } = string.Empty;                    // raw sex string for MD5
         public string Address { get; set; } = string.Empty;                // address
         public string Phone { get; set; } = string.Empty;                  // phone
         public string Citizenship { get; set; } = string.Empty;           // citizenship

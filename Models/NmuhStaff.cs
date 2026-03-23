@@ -15,7 +15,7 @@ namespace PordznakanAPI.Models
         
         public DateOnly DateOfBirth { get; set; }                          // date_of_birth
         public string SocNumber { get; set; } = string.Empty;              // soc_number
-        public string Sex { get; set; } = string.Empty;                    // sex (stored as string to preserve original value)
+        public bool Sex { get; set; }                                          // sex: true = male (1), false = female (0)
         public string Address { get; set; } = string.Empty;                // address
         public string Phone { get; set; } = string.Empty;                  // phone
         public string Citizenship { get; set; } = string.Empty;           // citizenship
@@ -31,8 +31,9 @@ namespace PordznakanAPI.Models
         public string PositionId { get; set; } = string.Empty;            // position_id
         public string PositionDetailId { get; set; } = string.Empty;       // position_detail_id
         public string PositionDetailName { get; set; } = string.Empty;    // position_detail_name
-        public string? GroupId { get; set; }                               // group_id (can be null)
-        public string GroupsJson { get; set; } = string.Empty;             // groups array stored as JSON (if present)
+        public List<int> GroupIds { get; set; } = new();                      // group_id parsed as list of ints (stored as JSON)
+
+        public List<NmuhStaffGroup> Groups { get; set; } = new();          // groups with subjects (navigation property)
         
         public string MD5 { get; set; } = string.Empty;                    // hash of important fields
         

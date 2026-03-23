@@ -71,11 +71,59 @@ namespace PordznakanAPI.Controllers
                 PositionId = staff.PositionId,
                 PositionDetailId = staff.PositionDetailId,
                 PositionDetailName = staff.PositionDetailName,
-                GroupId = staff.GroupId,
-                GroupsJson = staff.GroupsJson,
+                GroupIds = staff.GroupIds,
+                Groups = staff.Groups.Select(g => new NmuhStaffGroupDto
+                {
+                    GroupId = g.GroupId,
+                    GroupName = g.GroupName,
+                    Subjects = g.Subjects.Select(s => new NmuhSubjectDto
+                    {
+                        SubjectId = s.SubjectId,
+                        SubjectName = s.SubjectName,
+                        SubjectType = s.SubjectType,
+                        SubjectTypeId = s.SubjectTypeId
+                    }).ToList()
+                }).ToList(),
                 CreatedAt = staff.CreatedAt,
                 UpdatedAt = staff.UpdatedAt
             };
+        }
+
+        private static bool ParseSex(string? raw) => raw == "1";
+
+        private static List<int> ParseGroupIds(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return new List<int>();
+            return raw.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s.Trim(), out var id) ? id : 0)
+                .Where(id => id != 0)
+                .ToList();
+        }
+
+        private static List<NmuhStaffGroup> ParseGroups(string? groupsJson)
+        {
+            if (string.IsNullOrWhiteSpace(groupsJson)) return new List<NmuhStaffGroup>();
+            try
+            {
+                var arr = JArray.Parse(groupsJson);
+                return arr.OfType<JObject>().Select(g => new NmuhStaffGroup
+                {
+                    Id = Guid.NewGuid(),
+                    GroupId = int.TryParse(g["group_id"]?.ToString(), out var gid) ? gid : 0,
+                    GroupName = g["group"]?.ToString() ?? string.Empty,
+                    Subjects = (g["subjects"] as JArray ?? new JArray())
+                        .OfType<JObject>()
+                        .Select(s => new NmuhSubject
+                        {
+                            Id = Guid.NewGuid(),
+                            SubjectId = int.TryParse(s["subject_id"]?.ToString(), out var sid) ? sid : 0,
+                            SubjectName = s["subject"]?.ToString() ?? string.Empty,
+                            SubjectType = s["subject_type"]?.ToString() ?? string.Empty,
+                            SubjectTypeId = int.TryParse(s["subject_type_id"]?.ToString(), out var stid) ? stid : 0
+                        }).ToList()
+                }).ToList();
+            }
+            catch { return new List<NmuhStaffGroup>(); }
         }
 
 
@@ -171,7 +219,8 @@ namespace PordznakanAPI.Controllers
                     var lastName = staffObj["last_name"]?.ToString() ?? string.Empty;
                     var fatherName = staffObj["father_name"]?.ToString() ?? string.Empty;
                     var socNumber = staffObj["soc_number"]?.ToString() ?? string.Empty;
-                    var sex = staffObj["sex"]?.ToString() ?? string.Empty;
+                    var sexRaw = staffObj["sex"]?.ToString() ?? string.Empty;
+                    var sex = ParseSex(sexRaw);
                     var address = staffObj["address"]?.ToString() ?? string.Empty;
                     var phone = staffObj["phone"]?.ToString() ?? string.Empty;
                     var citizenship = staffObj["citizenship"]?.ToString() ?? string.Empty;
@@ -187,7 +236,7 @@ namespace PordznakanAPI.Controllers
                     var positionId = staffObj["position_id"]?.ToString() ?? string.Empty;
                     var positionDetailId = staffObj["position_detail_id"]?.ToString() ?? string.Empty;
                     var positionDetailName = staffObj["position_detail_name"]?.ToString() ?? string.Empty;
-                    var groupId = staffObj["group_id"]?.ToString(); // Can be null
+                    var groupIdRaw = staffObj["group_id"]?.ToString(); // raw comma-separated string kept for MD5 + staging
 
                     // Parse date of birth
                     DateOnly dateOfBirth = default;
@@ -215,7 +264,7 @@ namespace PordznakanAPI.Controllers
                         fatherName,
                         dateOfBirth.ToString("yyyy-MM-dd"),
                         socNumber,
-                        sex,
+                        sexRaw,
                         address,
                         phone,
                         citizenship,
@@ -231,7 +280,7 @@ namespace PordznakanAPI.Controllers
                         positionId,
                         positionDetailId,
                         positionDetailName,
-                        groupId,
+                        groupIdRaw,
                         groupsJson);
 
                     // Stream directly into staging table
@@ -264,8 +313,8 @@ namespace PordznakanAPI.Controllers
                         PositionId = positionId,
                         PositionDetailId = positionDetailId,
                         PositionDetailName = positionDetailName,
-                        GroupId = groupId,
-                        GroupsJson = groupsJson,
+                        GroupId = groupIdRaw,       // raw string kept in staging
+                        GroupsJson = groupsJson,    // raw JSON kept in staging
                         MD5 = md5,
                         CreatedAt = now,
                         UpdatedAt = now
@@ -331,10 +380,17 @@ namespace PordznakanAPI.Controllers
                             existing.PositionId = staging.PositionId;
                             existing.PositionDetailId = staging.PositionDetailId;
                             existing.PositionDetailName = staging.PositionDetailName;
-                            existing.GroupId = staging.GroupId;
-                            existing.GroupsJson = staging.GroupsJson;
+                            existing.GroupIds = ParseGroupIds(staging.GroupId);
                             existing.MD5 = staging.MD5;
                             existing.UpdatedAt = DateTime.UtcNow;
+
+                            // Replace groups: delete old (cascade removes subjects), insert new
+                            await _context.NmuhStaffGroups
+                                .Where(g => g.NmuhStaffId == existing.Id)
+                                .ExecuteDeleteAsync();
+                            var updatedGroups = ParseGroups(staging.GroupsJson);
+                            foreach (var g in updatedGroups) g.NmuhStaffId = existing.Id;
+                            _context.NmuhStaffGroups.AddRange(updatedGroups);
 
                             updatedCount++;
                             result.StaffUpdatedList.Add(MapToNmuhStaffDto(existing));
@@ -374,8 +430,8 @@ namespace PordznakanAPI.Controllers
                             PositionId = staging.PositionId,
                             PositionDetailId = staging.PositionDetailId,
                             PositionDetailName = staging.PositionDetailName,
-                            GroupId = staging.GroupId,
-                            GroupsJson = staging.GroupsJson,
+                            GroupIds = ParseGroupIds(staging.GroupId),
+                            Groups = ParseGroups(staging.GroupsJson),
                             MD5 = staging.MD5,
                             CreatedAt = staging.CreatedAt,
                             UpdatedAt = staging.UpdatedAt

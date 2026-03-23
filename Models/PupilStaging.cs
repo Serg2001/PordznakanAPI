@@ -22,6 +22,8 @@ namespace PordznakanAPI.Models
         public string LastName { get; set; } = string.Empty;
         public string FatherName { get; set; } = string.Empty;
 
+        public string SocNumber { get; set; } = string.Empty;
+
         public ECertificateType CertificateType { get; set; }
         public string Certificate { get; set; } = string.Empty;
 

@@ -13,7 +13,7 @@ namespace PordznakanAPI.DTOs
         public string FatherName { get; set; } = string.Empty;
         public DateOnly DateOfBirth { get; set; }
         public string SocNumber { get; set; } = string.Empty;
-        public string Sex { get; set; } = string.Empty;
+        public bool Sex { get; set; }
         public string Address { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string Citizenship { get; set; } = string.Empty;
@@ -29,8 +29,8 @@ namespace PordznakanAPI.DTOs
         public string PositionId { get; set; } = string.Empty;
         public string PositionDetailId { get; set; } = string.Empty;
         public string PositionDetailName { get; set; } = string.Empty;
-        public string GroupId { get; set; } = string.Empty;
-        public string GroupsJson { get; set; } = string.Empty;
+        public List<int> GroupIds { get; set; } = new();
+        public List<MmuhStaffGroupDto> Groups { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

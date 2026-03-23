@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Newtonsoft.Json;
 using PordznakanAPI.Models;
 
 namespace PordznakanAPI.Data
@@ -27,6 +29,10 @@ namespace PordznakanAPI.Data
         public DbSet<NmuhStudentStaging> NmuhStudentsStaging { get; set; }
         public DbSet<NmuhStaff> NmuhStaff { get; set; }
         public DbSet<NmuhStaffStaging> NmuhStaffStaging { get; set; }
+        public DbSet<NmuhStaffGroup> NmuhStaffGroups { get; set; }
+        public DbSet<NmuhSubject> NmuhSubjects { get; set; }
+        public DbSet<MmuhStaffGroup> MmuhStaffGroups { get; set; }
+        public DbSet<MmuhSubject> MmuhSubjects { get; set; }
         public DbSet<SchoolEmployee> SchoolEmployees { get; set; }
         public DbSet<MmuhInstitution> MmuhInstitutions { get; set; }
         public DbSet<MmuhInstitutionStaging> MmuhInstitutionsStaging { get; set; }
@@ -137,6 +143,44 @@ namespace PordznakanAPI.Data
             modelBuilder.Entity<MmuhStaff>()
                 .HasIndex(m => m.InstId);
 
+            // Store List<int> GroupIds as a JSON string column for MmuhStaff
+            var mmuhGroupIdsComparer = new ValueComparer<List<int>>(
+                (a, b) => a != null && b != null && a.SequenceEqual(b),
+                v => v.Aggregate(0, (acc, id) => HashCode.Combine(acc, id.GetHashCode())),
+                v => v.ToList());
+
+            modelBuilder.Entity<MmuhStaff>()
+                .Property(m => m.GroupIds)
+                .HasConversion(
+                    v => JsonConvert.SerializeObject(v),
+                    v => string.IsNullOrEmpty(v)
+                        ? new List<int>()
+                        : JsonConvert.DeserializeObject<List<int>>(v)!)
+                .Metadata.SetValueComparer(mmuhGroupIdsComparer);
+
+            // Configure MmuhStaffGroup entity
+            modelBuilder.Entity<MmuhStaffGroup>()
+                .HasKey(g => g.Id);
+
+            modelBuilder.Entity<MmuhStaffGroup>()
+                .HasIndex(g => g.MmuhStaffId);
+
+            modelBuilder.Entity<MmuhStaffGroup>()
+                .HasOne(g => g.MmuhStaff)
+                .WithMany(s => s.Groups)
+                .HasForeignKey(g => g.MmuhStaffId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Configure MmuhSubject entity
+            modelBuilder.Entity<MmuhSubject>()
+                .HasKey(s => s.Id);
+
+            modelBuilder.Entity<MmuhSubject>()
+                .HasOne(s => s.MmuhStaffGroup)
+                .WithMany(g => g.Subjects)
+                .HasForeignKey(s => s.MmuhStaffGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Configure MmuhStaff staging entity (same schema, different table)
             modelBuilder.Entity<MmuhStaffStaging>()
                 .ToTable("MmuhStaffStaging");
@@ -170,6 +214,44 @@ namespace PordznakanAPI.Data
 
             modelBuilder.Entity<NmuhStaff>()
                 .HasIndex(m => m.InstId);
+
+            // Store List<int> GroupIds as a JSON string column
+            var groupIdsComparer = new ValueComparer<List<int>>(
+                (a, b) => a != null && b != null && a.SequenceEqual(b),
+                v => v.Aggregate(0, (acc, id) => HashCode.Combine(acc, id.GetHashCode())),
+                v => v.ToList());
+
+            modelBuilder.Entity<NmuhStaff>()
+                .Property(m => m.GroupIds)
+                .HasConversion(
+                    v => JsonConvert.SerializeObject(v),
+                    v => string.IsNullOrEmpty(v)
+                        ? new List<int>()
+                        : JsonConvert.DeserializeObject<List<int>>(v)!)
+                .Metadata.SetValueComparer(groupIdsComparer);
+
+            // Configure NmuhStaffGroup entity
+            modelBuilder.Entity<NmuhStaffGroup>()
+                .HasKey(g => g.Id);
+
+            modelBuilder.Entity<NmuhStaffGroup>()
+                .HasIndex(g => g.NmuhStaffId);
+
+            modelBuilder.Entity<NmuhStaffGroup>()
+                .HasOne(g => g.NmuhStaff)
+                .WithMany(s => s.Groups)
+                .HasForeignKey(g => g.NmuhStaffId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Configure NmuhSubject entity
+            modelBuilder.Entity<NmuhSubject>()
+                .HasKey(s => s.Id);
+
+            modelBuilder.Entity<NmuhSubject>()
+                .HasOne(s => s.NmuhStaffGroup)
+                .WithMany(g => g.Subjects)
+                .HasForeignKey(s => s.NmuhStaffGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // Configure NmuhStaff staging entity (same schema, different table)
             modelBuilder.Entity<NmuhStaffStaging>()

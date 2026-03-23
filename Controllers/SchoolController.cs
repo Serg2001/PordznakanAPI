@@ -106,6 +106,7 @@ namespace PordznakanAPI.Controllers
                 FirstName = pupil.FirstName,
                 LastName = pupil.LastName,
                 FatherName = pupil.FatherName,
+                SocNumber = pupil.SocNumber,
                 CertificateType = pupil.CertificateType,
                 Certificate = pupil.Certificate,
                 Birthday = pupil.Birthday,
@@ -120,6 +121,7 @@ namespace PordznakanAPI.Controllers
         private static string ComputePupilMd5(int ktakPupilId, int ktakSchoolId, string classroomId,
             KtakPlace place, EGrade grade, ESubGrade subGrade,
             string firstName, string lastName, string fatherName,
+            string socNumber,
             ECertificateType certificateType, string certificate,
             DateOnly birthday, bool gender, EPupilStatus status)
         {
@@ -134,6 +136,7 @@ namespace PordznakanAPI.Controllers
                 firstName ?? string.Empty,
                 lastName ?? string.Empty,
                 fatherName ?? string.Empty,
+                socNumber ?? string.Empty,
                 certificateType.ToString(),
                 certificate ?? string.Empty,
                 birthday.ToString("yyyy-MM-dd"),
@@ -448,6 +451,7 @@ namespace PordznakanAPI.Controllers
                                                             continue;
 
                                                         string identDocNumber = student["ident_document_number"]?.ToString() ?? "";
+                                                        string socNumber = student["soc_number"]?.ToString() ?? "";
 
                                                         // Parse date of birth
                                                         DateOnly birthday = default;
@@ -479,6 +483,7 @@ namespace PordznakanAPI.Controllers
                                                             firstName,
                                                             lastName,
                                                             fatherName,
+                                                            socNumber,
                                                             certType,
                                                             identDocNumber,
                                                             birthday,
@@ -500,6 +505,7 @@ namespace PordznakanAPI.Controllers
                                                             FirstName = firstName,
                                                             LastName = lastName,
                                                             FatherName = fatherName,
+                                                            SocNumber = socNumber,
                                                             CertificateType = certType,
                                                             Certificate = identDocNumber,
                                                             Birthday = birthday,
@@ -638,7 +644,7 @@ namespace PordznakanAPI.Controllers
                 var stagedIds = stagingRows.Select(s => s.KtakPupilId).Distinct().ToList();
 
                 var existingPupils = await _context.Pupils
-                    .Where(p => stagedIds.Contains(p.KtakPupilId))
+                    .Where(p => stagedIds.Contains(p.KtakPupilId) && p.RegionId == regionId)
                     .ToListAsync();
 
                 var existingDict = existingPupils.ToDictionary(p => p.KtakPupilId);
@@ -663,6 +669,7 @@ namespace PordznakanAPI.Controllers
                             r.FirstName = s.FirstName;
                             r.LastName = s.LastName;
                             r.FatherName = s.FatherName;
+                            r.SocNumber = s.SocNumber;
                             r.CertificateType = s.CertificateType;
                             r.Certificate = s.Certificate;
                             r.Birthday = s.Birthday;
@@ -692,6 +699,7 @@ namespace PordznakanAPI.Controllers
                             FirstName = s.FirstName,
                             LastName = s.LastName,
                             FatherName = s.FatherName,
+                            SocNumber = s.SocNumber,
                             CertificateType = s.CertificateType,
                             Certificate = s.Certificate,
                             Birthday = s.Birthday,

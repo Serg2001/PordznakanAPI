@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PordznakanAPI.Data;
 
@@ -11,9 +12,11 @@ using PordznakanAPI.Data;
 namespace PordznakanAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260319080509_NmuhStaffGroupsAndSubjects")]
+    partial class NmuhStaffGroupsAndSubjects
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -251,7 +254,11 @@ namespace PordznakanAPI.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("GroupIds")
+                    b.Property<string>("GroupId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("GroupsJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -321,8 +328,9 @@ namespace PordznakanAPI.Migrations
                     b.Property<int>("RegionId")
                         .HasColumnType("int");
 
-                    b.Property<bool>("Sex")
-                        .HasColumnType("bit");
+                    b.Property<string>("Sex")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SocNumber")
                         .IsRequired()
@@ -338,29 +346,6 @@ namespace PordznakanAPI.Migrations
                     b.HasIndex("MmuhStaffId");
 
                     b.ToTable("MmuhStaff");
-                });
-
-            modelBuilder.Entity("PordznakanAPI.Models.MmuhStaffGroup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("GroupId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("GroupName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("MmuhStaffId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MmuhStaffId");
-
-                    b.ToTable("MmuhStaffGroups");
                 });
 
             modelBuilder.Entity("PordznakanAPI.Models.MmuhStaffStaging", b =>
@@ -473,10 +458,7 @@ namespace PordznakanAPI.Migrations
                     b.Property<int>("RegionId")
                         .HasColumnType("int");
 
-                    b.Property<bool>("Sex")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("SexRaw")
+                    b.Property<string>("Sex")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -642,36 +624,6 @@ namespace PordznakanAPI.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("MmuhStudentsStaging", (string)null);
-                });
-
-            modelBuilder.Entity("PordznakanAPI.Models.MmuhSubject", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("MmuhStaffGroupId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("SubjectId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SubjectName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("SubjectType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("SubjectTypeId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MmuhStaffGroupId");
-
-                    b.ToTable("MmuhSubjects");
                 });
 
             modelBuilder.Entity("PordznakanAPI.Models.NmuhInstitution", b =>
@@ -1294,10 +1246,6 @@ namespace PordznakanAPI.Migrations
                     b.Property<int>("RegionId")
                         .HasColumnType("int");
 
-                    b.Property<string>("SocNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -1377,10 +1325,6 @@ namespace PordznakanAPI.Migrations
 
                     b.Property<int>("RegionId")
                         .HasColumnType("int");
-
-                    b.Property<string>("SocNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -1770,28 +1714,6 @@ namespace PordznakanAPI.Migrations
                     b.Navigation("School");
                 });
 
-            modelBuilder.Entity("PordznakanAPI.Models.MmuhStaffGroup", b =>
-                {
-                    b.HasOne("PordznakanAPI.Models.MmuhStaff", "MmuhStaff")
-                        .WithMany("Groups")
-                        .HasForeignKey("MmuhStaffId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MmuhStaff");
-                });
-
-            modelBuilder.Entity("PordznakanAPI.Models.MmuhSubject", b =>
-                {
-                    b.HasOne("PordznakanAPI.Models.MmuhStaffGroup", "MmuhStaffGroup")
-                        .WithMany("Subjects")
-                        .HasForeignKey("MmuhStaffGroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MmuhStaffGroup");
-                });
-
             modelBuilder.Entity("PordznakanAPI.Models.NmuhStaffGroup", b =>
                 {
                     b.HasOne("PordznakanAPI.Models.NmuhStaff", "NmuhStaff")
@@ -1850,16 +1772,6 @@ namespace PordznakanAPI.Migrations
             modelBuilder.Entity("PordznakanAPI.Models.Employee", b =>
                 {
                     b.Navigation("DirectedSchools");
-                });
-
-            modelBuilder.Entity("PordznakanAPI.Models.MmuhStaff", b =>
-                {
-                    b.Navigation("Groups");
-                });
-
-            modelBuilder.Entity("PordznakanAPI.Models.MmuhStaffGroup", b =>
-                {
-                    b.Navigation("Subjects");
                 });
 
             modelBuilder.Entity("PordznakanAPI.Models.NmuhStaff", b =>

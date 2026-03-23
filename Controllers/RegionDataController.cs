@@ -86,6 +86,7 @@ namespace PordznakanAPI.Controllers
                     FatherName = p.FatherName,
                     CertificateType = p.CertificateType,
                     Certificate = p.Certificate,
+                    SocNumber = p.SocNumber,
                     Birthday = p.Birthday,
                     Gender = p.Gender,
                     Status = p.Status,
@@ -121,6 +122,7 @@ namespace PordznakanAPI.Controllers
                     FatherName = p.FatherName,
                     CertificateType = p.CertificateType,
                     Certificate = p.Certificate,
+                    SocNumber = p.SocNumber,
                     Birthday = p.Birthday,
                     Gender = p.Gender,
                     Status = p.Status,
@@ -322,13 +324,13 @@ namespace PordznakanAPI.Controllers
         /// P.6 – Returns FirstName, LastName, Grade and SubGrade for a pupil
         /// identified by KtakSchoolId and Certificate number (ident_document_number).
         /// </summary>
-        [HttpGet("pupils/by-school/{schoolId}/{certNumber}")]
-        public async Task<IActionResult> GetPupilBySchoolAndCert(
+        [HttpGet("pupils/by-school/{schoolId}/{socNumber}")]
+        public async Task<IActionResult> GetPupilBySchoolAndSoc(
             [FromRoute] int schoolId,
-            [FromRoute] string certNumber)
+            [FromRoute] string socNumber)
         {
             var pupil = await _context.Pupils
-                .Where(p => p.KtakSchoolId == schoolId && p.Certificate == certNumber)
+                .Where(p => p.KtakSchoolId == schoolId && p.SocNumber == socNumber)
                 .Select(p => new
                 {
                     p.FirstName,
@@ -339,7 +341,7 @@ namespace PordznakanAPI.Controllers
                 .FirstOrDefaultAsync();
 
             if (pupil == null)
-                return NotFound(new { message = $"No pupil found for schoolId={schoolId} and certificate={certNumber}" });
+                return NotFound(new { message = $"No pupil found for schoolId={schoolId} and socNumber={socNumber}" });
 
             return Ok(pupil);
         }
@@ -479,12 +481,15 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetMmuhStaffByRegion([FromRoute] int regionId)
         {
             var staff = await _context.MmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.RegionId == regionId)
                 .Select(s => new
                 {
                     s.Id,
                     s.MmuhStaffId,
                     s.InstId,
+                    s.InternalSchoolId,
                     s.RegionId,
                     s.InstName,
                     s.FirstName,
@@ -508,8 +513,19 @@ namespace PordznakanAPI.Controllers
                     s.PositionId,
                     s.PositionDetailId,
                     s.PositionDetailName,
-                    s.GroupId,
-                    s.GroupsJson,
+                    s.GroupIds,
+                    Groups = s.Groups.Select(g => new
+                    {
+                        g.GroupId,
+                        g.GroupName,
+                        Subjects = g.Subjects.Select(sub => new
+                        {
+                            sub.SubjectId,
+                            sub.SubjectName,
+                            sub.SubjectType,
+                            sub.SubjectTypeId
+                        })
+                    }),
                     s.CreatedAt,
                     s.UpdatedAt
                 })
@@ -525,6 +541,8 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetMmuhStaffByInstitution([FromRoute] int institutionId)
         {
             var staff = await _context.MmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.InstId == institutionId)
                 .Select(s => new
                 {
@@ -555,8 +573,19 @@ namespace PordznakanAPI.Controllers
                     s.PositionId,
                     s.PositionDetailId,
                     s.PositionDetailName,
-                    s.GroupId,
-                    s.GroupsJson,
+                    s.GroupIds,
+                    Groups = s.Groups.Select(g => new
+                    {
+                        g.GroupId,
+                        g.GroupName,
+                        Subjects = g.Subjects.Select(sub => new
+                        {
+                            sub.SubjectId,
+                            sub.SubjectName,
+                            sub.SubjectType,
+                            sub.SubjectTypeId
+                        })
+                    }),
                     s.CreatedAt,
                     s.UpdatedAt
                 })
@@ -679,6 +708,7 @@ namespace PordznakanAPI.Controllers
                     s.Id,
                     s.NmuhStaffId,
                     s.InstId,
+                    s.InternalSchoolId,
                     s.RegionId,
                     s.InstName,
                     s.FirstName,
@@ -702,8 +732,19 @@ namespace PordznakanAPI.Controllers
                     s.PositionId,
                     s.PositionDetailId,
                     s.PositionDetailName,
-                    s.GroupId,
-                    s.GroupsJson,
+                    s.GroupIds,
+                    Groups = s.Groups.Select(g => new
+                    {
+                        g.GroupId,
+                        g.GroupName,
+                        Subjects = g.Subjects.Select(sub => new
+                        {
+                            sub.SubjectId,
+                            sub.SubjectName,
+                            sub.SubjectType,
+                            sub.SubjectTypeId
+                        })
+                    }),
                     s.CreatedAt,
                     s.UpdatedAt
                 })
@@ -749,14 +790,64 @@ namespace PordznakanAPI.Controllers
                     s.PositionId,
                     s.PositionDetailId,
                     s.PositionDetailName,
-                    s.GroupId,
-                    s.GroupsJson,
+                    s.GroupIds,
+                    Groups = s.Groups.Select(g => new
+                    {
+                        g.GroupId,
+                        g.GroupName,
+                        Subjects = g.Subjects.Select(sub => new
+                        {
+                            sub.SubjectId,
+                            sub.SubjectName,
+                            sub.SubjectType,
+                            sub.SubjectTypeId
+                        })
+                    }),
                     s.CreatedAt,
                     s.UpdatedAt
                 })
                 .ToListAsync();
 
             return Ok(staff);
+        }
+
+        // ── Director endpoints ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns all directors (employees with directed schools) for the given region.
+        /// </summary>
+        [HttpGet("directors/by-region/{regionId}")]
+        public async Task<IActionResult> GetDirectorsByRegion([FromRoute] int regionId)
+        {
+            var directors = await _context.Employees
+                .Where(e => e.Position == "Տնօրեն" && e.DirectedSchools.Any(s => s.RegionId == regionId))
+                .Select(e => new
+                {
+                    e.Id,
+                    e.ExternalPersonId,
+                    e.Ssn,
+                    e.FirstName,
+                    e.LastName,
+                    e.FatherName,
+                    e.Phone,
+                    e.Position,
+                    e.CreatedAt,
+                    e.UpdatedAt,
+                    DirectedSchools = e.DirectedSchools
+                        .Where(s => s.RegionId == regionId)
+                        .Select(s => new
+                        {
+                            s.DshhSchoolId,
+                            s.KtakSchoolId,
+                            s.Name,
+                            s.Marz,
+                            s.Region,
+                            s.Community
+                        })
+                })
+                .ToListAsync();
+
+            return Ok(directors);
         }
 
         // ── SchoolEmployee endpoints ─────────────────────────────────────────
@@ -879,6 +970,7 @@ namespace PordznakanAPI.Controllers
                     FatherName          = p.FatherName,
                     CertificateType     = p.CertificateType,
                     Certificate         = p.Certificate,
+                    SocNumber           = p.SocNumber,
                     Birthday            = p.Birthday,
                     Gender              = p.Gender,
                     Status              = p.Status,
@@ -987,12 +1079,15 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetMmuhStaffById([FromRoute] Guid id)
         {
             var staff = await _context.MmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.Id == id)
                 .Select(s => new
                 {
                     s.Id,
                     s.MmuhStaffId,
                     s.InstId,
+                    s.InternalSchoolId,
                     s.RegionId,
                     s.InstName,
                     s.FirstName,
@@ -1016,8 +1111,19 @@ namespace PordznakanAPI.Controllers
                     s.PositionId,
                     s.PositionDetailId,
                     s.PositionDetailName,
-                    s.GroupId,
-                    s.GroupsJson,
+                    s.GroupIds,
+                    Groups = s.Groups.Select(g => new
+                    {
+                        g.GroupId,
+                        g.GroupName,
+                        Subjects = g.Subjects.Select(sub => new
+                        {
+                            sub.SubjectId,
+                            sub.SubjectName,
+                            sub.SubjectType,
+                            sub.SubjectTypeId
+                        })
+                    }),
                     s.CreatedAt,
                     s.UpdatedAt
                 })
@@ -1102,8 +1208,19 @@ namespace PordznakanAPI.Controllers
                     s.PositionId,
                     s.PositionDetailId,
                     s.PositionDetailName,
-                    s.GroupId,
-                    s.GroupsJson,
+                    s.GroupIds,
+                    Groups = s.Groups.Select(g => new
+                    {
+                        g.GroupId,
+                        g.GroupName,
+                        Subjects = g.Subjects.Select(sub => new
+                        {
+                            sub.SubjectId,
+                            sub.SubjectName,
+                            sub.SubjectType,
+                            sub.SubjectTypeId
+                        })
+                    }),
                     s.CreatedAt,
                     s.UpdatedAt
                 })
