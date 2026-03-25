@@ -302,6 +302,7 @@ namespace PordznakanAPI.Controllers
                 {
                     t.FirstName,
                     t.LastName,
+                    t.KtakTeacherId,
                     t.DigitLevel,
                     Subjects = t.Subjects.Select(s => new
                     {
@@ -334,6 +335,7 @@ namespace PordznakanAPI.Controllers
                 .Select(p => new
                 {
                     p.FirstName,
+                    p.ktakPupilId,
                     p.LastName,
                     p.Grade,
                     p.SubGrade
