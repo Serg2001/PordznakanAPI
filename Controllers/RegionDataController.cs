@@ -105,7 +105,7 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetPupilsBySchool([FromRoute] int schoolId)
         {
             var pupils = await _context.Pupils
-                .Where(p => p.KtakSchoolId == schoolId)
+                .Where(p => p.KtakSchoolId == schoolId && p.Status == EPupilStatus.New)
                 .Select(p => new PupilDto
                 {
                     Id = p.Id,
@@ -335,7 +335,7 @@ namespace PordznakanAPI.Controllers
                 .Select(p => new
                 {
                     p.FirstName,
-                    p.ktakPupilId,
+                    p.KtakPupilId,
                     p.LastName,
                     p.Grade,
                     p.SubGrade
@@ -405,6 +405,25 @@ namespace PordznakanAPI.Controllers
             return Ok(institutions);
         }
 
+        /// <summary>
+        /// Returns a summary (DshhSchoolId, KtakSchoolId, Name) of all MMUH institutions for the given region.
+        /// </summary>
+        [HttpGet("mmuh-institutions/summary/by-region/{regionId}")]
+        public async Task<IActionResult> GetMmuhInstitutionsSummaryByRegion([FromRoute] int regionId)
+        {
+            var institutions = await _context.MmuhInstitutions
+                .Where(i => i.RegionId == regionId)
+                .Select(i => new MmuhInstitutionSummaryDto
+                {
+                    DshhSchoolId = i.Id,
+                    KtakSchoolId = i.InstId,
+                    Name = i.Name
+                })
+                .ToListAsync();
+
+            return Ok(institutions);
+        }
+
         // ── MmuhStudent endpoints ────────────────────────────────────────────
 
         /// <summary>
@@ -468,6 +487,30 @@ namespace PordznakanAPI.Controllers
                     s.ClassroomGrade,
                     s.CreatedAt,
                     s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        /// <summary>
+        /// Returns a summary (Id, KtakPupilId, KtakSchoolId, FirstName, LastName, SocNumber, Grade)
+        /// of all MMUH students that belong to the given institution (by InstId).
+        /// </summary>
+        [HttpGet("mmuh-students/summary/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMmuhStudentsSummaryByInstitution([FromRoute] int institutionId)
+        {
+            var students = await _context.MmuhStudents
+                .Where(s => s.MmuhSchoolId == institutionId)
+                .Select(s => new MmuhStudentSummaryDto
+                {
+                    Id = s.Id,
+                    KtakPupilId = s.MmuhStudentId,
+                    KtakSchoolId = s.MmuhSchoolId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    SocNumber = s.SocNumber,
+                    Grade = s.ClassroomGrade
                 })
                 .ToListAsync();
 
@@ -596,6 +639,28 @@ namespace PordznakanAPI.Controllers
             return Ok(staff);
         }
 
+        /// <summary>
+        /// Returns MMUH teachers (PositionName == "Դասախոս") for the given institution (by InstId).
+        /// </summary>
+        [HttpGet("mmuh-teachers/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMmuhTeachersByInstitution([FromRoute] int institutionId)
+        {
+            var teachers = await _context.MmuhStaff
+                .Where(s => s.InstId == institutionId && s.PositionName == "Դասախոս")
+                .Select(s => new MmuhTeacherSummaryDto
+                {
+                    Id = s.Id,
+                    KtakTeacherId = s.MmuhStaffId,
+                    KtakSchoolId = s.InstId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    SocNumber = s.SocNumber
+                })
+                .ToListAsync();
+
+            return Ok(teachers);
+        }
+
         // ── NmuhInstitution endpoints ────────────────────────────────────────
 
         /// <summary>
@@ -618,6 +683,25 @@ namespace PordznakanAPI.Controllers
                     i.BusinessAddress,
                     i.CreatedAt,
                     i.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(institutions);
+        }
+
+        /// <summary>
+        /// Returns a summary (DshhSchoolId, KtakSchoolId, Name) of all NMUH institutions for the given region.
+        /// </summary>
+        [HttpGet("nmuh-institutions/summary/by-region/{regionId}")]
+        public async Task<IActionResult> GetNmuhInstitutionsSummaryByRegion([FromRoute] int regionId)
+        {
+            var institutions = await _context.NmuhInstitutions
+                .Where(i => i.RegionId == regionId)
+                .Select(i => new NmuhInstitutionSummaryDto
+                {
+                    DshhSchoolId = i.Id,
+                    KtakSchoolId = i.InstId,
+                    Name = i.Name
                 })
                 .ToListAsync();
 
@@ -689,6 +773,30 @@ namespace PordznakanAPI.Controllers
                     s.ClassroomGrade,
                     s.CreatedAt,
                     s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        /// <summary>
+        /// Returns a summary (Id, KtakPupilId, KtakSchoolId, FirstName, LastName, SocNumber, Grade)
+        /// of all NMUH students that belong to the given institution (by InstId).
+        /// </summary>
+        [HttpGet("nmuh-students/summary/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetNmuhStudentsSummaryByInstitution([FromRoute] int institutionId)
+        {
+            var students = await _context.NmuhStudents
+                .Where(s => s.NmuhSchoolId == institutionId)
+                .Select(s => new NmuhStudentSummaryDto
+                {
+                    Id = s.Id,
+                    KtakPupilId = s.NmuhStudentId,
+                    KtakSchoolId = s.NmuhSchoolId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    SocNumber = s.SocNumber,
+                    Grade = s.ClassroomGrade
                 })
                 .ToListAsync();
 
@@ -811,6 +919,28 @@ namespace PordznakanAPI.Controllers
                 .ToListAsync();
 
             return Ok(staff);
+        }
+
+        /// <summary>
+        /// Returns NMUH teachers (PositionName == "Դասախոս") for the given institution (by InstId).
+        /// </summary>
+        [HttpGet("nmuh-teachers/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetNmuhTeachersByInstitution([FromRoute] int institutionId)
+        {
+            var teachers = await _context.NmuhStaff
+                .Where(s => s.InstId == institutionId && s.PositionName == "Դասախոս")
+                .Select(s => new NmuhTeacherSummaryDto
+                {
+                    Id = s.Id,
+                    KtakTeacherId = s.NmuhStaffId,
+                    KtakSchoolId = s.InstId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    SocNumber = s.SocNumber
+                })
+                .ToListAsync();
+
+            return Ok(teachers);
         }
 
         // ── Director endpoints ───────────────────────────────────────────────
