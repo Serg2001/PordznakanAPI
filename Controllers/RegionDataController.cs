@@ -26,11 +26,12 @@ namespace PordznakanAPI.Controllers
         {
             var schools = await _context.Schools
                 .Where(s => s.RegionId == regionId)
-                .Select(s => new
+                .Select(s => new SchoolSummaryDto
                 {
-                    s.DshhSchoolId,
-                    s.KtakSchoolId,
-                    s.Name
+                    DshhSchoolId = s.DshhSchoolId,
+                    KtakSchoolId = s.KtakSchoolId,
+                    Name = s.Name,
+                    Place = KtakPlace.School
                 })
                 .ToListAsync();
 
@@ -417,7 +418,8 @@ namespace PordznakanAPI.Controllers
                 {
                     DshhSchoolId = i.Id,
                     KtakSchoolId = i.InstId,
-                    Name = i.Name
+                    Name = i.Name,
+                    Place = KtakPlace.Mmuh
                 })
                 .ToListAsync();
 
@@ -510,7 +512,8 @@ namespace PordznakanAPI.Controllers
                     FirstName = s.FirstName,
                     LastName = s.LastName,
                     SocNumber = s.SocNumber,
-                    Grade = s.ClassroomGrade
+                    Grade = s.ClassroomGrade,
+                    Place = KtakPlace.Mmuh
                 })
                 .ToListAsync();
 
@@ -654,7 +657,8 @@ namespace PordznakanAPI.Controllers
                     KtakSchoolId = s.InstId,
                     FirstName = s.FirstName,
                     LastName = s.LastName,
-                    SocNumber = s.SocNumber
+                    SocNumber = s.SocNumber,
+                    Place = KtakPlace.Mmuh
                 })
                 .ToListAsync();
 
@@ -701,7 +705,8 @@ namespace PordznakanAPI.Controllers
                 {
                     DshhSchoolId = i.Id,
                     KtakSchoolId = i.InstId,
-                    Name = i.Name
+                    Name = i.Name,
+                    Place = KtakPlace.Nmuh
                 })
                 .ToListAsync();
 
@@ -796,7 +801,8 @@ namespace PordznakanAPI.Controllers
                     FirstName = s.FirstName,
                     LastName = s.LastName,
                     SocNumber = s.SocNumber,
-                    Grade = s.ClassroomGrade
+                    Grade = s.ClassroomGrade,
+                    Place = KtakPlace.Nmuh
                 })
                 .ToListAsync();
 
@@ -936,7 +942,8 @@ namespace PordznakanAPI.Controllers
                     KtakSchoolId = s.InstId,
                     FirstName = s.FirstName,
                     LastName = s.LastName,
-                    SocNumber = s.SocNumber
+                    SocNumber = s.SocNumber,
+                    Place = KtakPlace.Nmuh
                 })
                 .ToListAsync();
 

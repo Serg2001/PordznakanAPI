@@ -1,3 +1,5 @@
+using PordznakanAPI.Enums;
+
 namespace PordznakanAPI.DTOs
 {
     public class NmuhTeacherSummaryDto
@@ -8,5 +10,6 @@ namespace PordznakanAPI.DTOs
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string SocNumber { get; set; } = string.Empty;
+        public KtakPlace Place { get; set; }
     }
 }
