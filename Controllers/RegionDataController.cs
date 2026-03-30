@@ -533,7 +533,7 @@ namespace PordznakanAPI.Controllers
         {
             var student = await _context.MmuhStudents
                 .Where(s => s.MmuhSchoolId == institutionId && s.SocNumber == socNumber)
-                .Select(s => new MmuhStudentSummaryDto
+                .Select(s => new
                 {
                     Id = s.Id,
                     KtakPupilId = s.MmuhStudentId,
@@ -707,7 +707,7 @@ namespace PordznakanAPI.Controllers
         {
             var teacher = await _context.MmuhStaff
                 .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
-                .Select(s => new MmuhTeacherSummaryDto
+                .Select(s => new
                 {
                     Id = s.Id,
                     KtakTeacherId = s.MmuhStaffId,
@@ -879,7 +879,7 @@ namespace PordznakanAPI.Controllers
         {
             var student = await _context.NmuhStudents
                 .Where(s => s.NmuhSchoolId == institutionId && s.SocNumber == socNumber)
-                .Select(s => new NmuhStudentSummaryDto
+                .Select(s => new
                 {
                     Id = s.Id,
                     KtakPupilId = s.NmuhStudentId,
@@ -1049,7 +1049,7 @@ namespace PordznakanAPI.Controllers
         {
             var teacher = await _context.NmuhStaff
                 .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
-                .Select(s => new NmuhTeacherSummaryDto
+                .Select(s => new
                 {
                     Id = s.Id,
                     KtakTeacherId = s.NmuhStaffId,
