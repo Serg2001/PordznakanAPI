@@ -288,7 +288,7 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
-        /// T.5 – Returns FirstName, LastName, DigitLevel and Subjects for a teacher
+        /// T.5 – Returns FirstName, LastName, DigitLevel, Place and Subjects for a teacher
         /// identified by KtakSchoolId and SocNumber.
         /// </summary>
         [HttpGet("teachers/by-school/{schoolId}/{socNumber}")]
@@ -305,6 +305,7 @@ namespace PordznakanAPI.Controllers
                     t.LastName,
                     t.KtakTeacherId,
                     t.DigitLevel,
+                    Place = KtakPlace.School,
                     Subjects = t.Subjects.Select(s => new
                     {
                         s.Id,
@@ -323,7 +324,7 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
-        /// P.6 – Returns FirstName, LastName, Grade and SubGrade for a pupil
+        /// P.6 – Returns FirstName, LastName, Grade, SubGrade and Place for a pupil
         /// identified by KtakSchoolId and Certificate number (ident_document_number).
         /// </summary>
         [HttpGet("pupils/by-school/{schoolId}/{socNumber}")]
@@ -339,7 +340,8 @@ namespace PordznakanAPI.Controllers
                     p.KtakPupilId,
                     p.LastName,
                     p.Grade,
-                    p.SubGrade
+                    p.SubGrade,
+                    Place = KtakPlace.School
                 })
                 .FirstOrDefaultAsync();
 
@@ -520,6 +522,35 @@ namespace PordznakanAPI.Controllers
             return Ok(students);
         }
 
+        /// <summary>
+        /// Returns FirstName, LastName, Grade and KtakSchoolId for an MMUH student
+        /// identified by MmuhSchoolId and SocNumber.
+        /// </summary>
+        [HttpGet("mmuh-students/by-institution/{institutionId}/{socNumber}")]
+        public async Task<IActionResult> GetMmuhStudentByInstitutionAndSoc(
+            [FromRoute] int institutionId,
+            [FromRoute] string socNumber)
+        {
+            var student = await _context.MmuhStudents
+                .Where(s => s.MmuhSchoolId == institutionId && s.SocNumber == socNumber)
+                .Select(s => new MmuhStudentSummaryDto
+                {
+                    Id = s.Id,
+                    KtakPupilId = s.MmuhStudentId,
+                    KtakSchoolId = s.MmuhSchoolId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    Grade = s.ClassroomGrade,
+                    Place = KtakPlace.Mmuh
+                })
+                .FirstOrDefaultAsync();
+
+            if (student == null)
+                return NotFound(new { message = $"No MMUH student found for institutionId={institutionId} and socNumber={socNumber}" });
+
+            return Ok(student);
+        }
+
         // ── MmuhStaff endpoints ──────────────────────────────────────────────
 
         /// <summary>
@@ -663,6 +694,34 @@ namespace PordznakanAPI.Controllers
                 .ToListAsync();
 
             return Ok(teachers);
+        }
+
+        /// <summary>
+        /// Returns FirstName, LastName, KtakTeacherId and KtakSchoolId for an MMUH teacher
+        /// identified by InstId and SocNumber.
+        /// </summary>
+        [HttpGet("mmuh-teachers/by-institution/{institutionId}/{socNumber}")]
+        public async Task<IActionResult> GetMmuhTeacherByInstitutionAndSoc(
+            [FromRoute] int institutionId,
+            [FromRoute] string socNumber)
+        {
+            var teacher = await _context.MmuhStaff
+                .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
+                .Select(s => new MmuhTeacherSummaryDto
+                {
+                    Id = s.Id,
+                    KtakTeacherId = s.MmuhStaffId,
+                    KtakSchoolId = s.InstId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    Place = KtakPlace.Mmuh
+                })
+                .FirstOrDefaultAsync();
+
+            if (teacher == null)
+                return NotFound(new { message = $"No MMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
+
+            return Ok(teacher);
         }
 
         // ── NmuhInstitution endpoints ────────────────────────────────────────
@@ -809,6 +868,35 @@ namespace PordznakanAPI.Controllers
             return Ok(students);
         }
 
+        /// <summary>
+        /// Returns FirstName, LastName, Grade and KtakSchoolId for an NMUH student
+        /// identified by NmuhSchoolId and SocNumber.
+        /// </summary>
+        [HttpGet("nmuh-students/by-institution/{institutionId}/{socNumber}")]
+        public async Task<IActionResult> GetNmuhStudentByInstitutionAndSoc(
+            [FromRoute] int institutionId,
+            [FromRoute] string socNumber)
+        {
+            var student = await _context.NmuhStudents
+                .Where(s => s.NmuhSchoolId == institutionId && s.SocNumber == socNumber)
+                .Select(s => new NmuhStudentSummaryDto
+                {
+                    Id = s.Id,
+                    KtakPupilId = s.NmuhStudentId,
+                    KtakSchoolId = s.NmuhSchoolId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    Grade = s.ClassroomGrade,
+                    Place = KtakPlace.Nmuh
+                })
+                .FirstOrDefaultAsync();
+
+            if (student == null)
+                return NotFound(new { message = $"No NMUH student found for institutionId={institutionId} and socNumber={socNumber}" });
+
+            return Ok(student);
+        }
+
         // ── NmuhStaff endpoints ──────────────────────────────────────────────
 
         /// <summary>
@@ -948,6 +1036,34 @@ namespace PordznakanAPI.Controllers
                 .ToListAsync();
 
             return Ok(teachers);
+        }
+
+        /// <summary>
+        /// Returns FirstName, LastName, KtakTeacherId and KtakSchoolId for an NMUH teacher
+        /// identified by InstId and SocNumber.
+        /// </summary>
+        [HttpGet("nmuh-teachers/by-institution/{institutionId}/{socNumber}")]
+        public async Task<IActionResult> GetNmuhTeacherByInstitutionAndSoc(
+            [FromRoute] int institutionId,
+            [FromRoute] string socNumber)
+        {
+            var teacher = await _context.NmuhStaff
+                .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
+                .Select(s => new NmuhTeacherSummaryDto
+                {
+                    Id = s.Id,
+                    KtakTeacherId = s.NmuhStaffId,
+                    KtakSchoolId = s.InstId,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    Place = KtakPlace.Nmuh
+                })
+                .FirstOrDefaultAsync();
+
+            if (teacher == null)
+                return NotFound(new { message = $"No NMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
+
+            return Ok(teacher);
         }
 
         // ── Director endpoints ───────────────────────────────────────────────
