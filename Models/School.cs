@@ -9,6 +9,7 @@ public class School
     public string Marz { get; set; } = string.Empty;  // marz (province)
     public string Region { get; set; } = string.Empty;  // region (district)
     public string Community { get; set; } = string.Empty;  // community
+    public string Email { get; set; } = string.Empty;     // school_email
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

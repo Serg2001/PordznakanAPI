@@ -67,6 +67,7 @@ namespace PordznakanAPI.Controllers
                 Marz = school.Marz,
                 Region = school.Region,
                 Community = school.Community,
+                Email = school.Email,
                 CreatedAt = school.CreatedAt,
                 UpdatedAt = school.UpdatedAt
             };
@@ -375,6 +376,7 @@ namespace PordznakanAPI.Controllers
                         Marz = schoolObj["marz"]?.ToString() ?? "",
                         Region = schoolObj["region"]?.ToString() ?? "",
                         Community = schoolObj["community"]?.ToString() ?? "",
+                        Email = schoolObj["school_email"]?.ToString() ?? "",
                         CreatedAt = now,
                         UpdatedAt = now
                     };
@@ -546,6 +548,7 @@ namespace PordznakanAPI.Controllers
                         existingSchool.Marz = school.Marz;
                         existingSchool.Region = school.Region;
                         existingSchool.Community = school.Community;
+                        existingSchool.Email = school.Email;
                         existingSchool.UpdatedAt = DateTime.UtcNow;
 
                         schoolsUpdated++;

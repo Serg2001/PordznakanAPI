@@ -51,6 +51,7 @@ namespace PordznakanAPI.Controllers
                 LegalAddress = institution.LegalAddress,
                 BusinessMarzId = institution.BusinessMarzId,
                 BusinessAddress = institution.BusinessAddress,
+                Email = institution.Email,
                 CreatedAt = institution.CreatedAt,
                 UpdatedAt = institution.UpdatedAt
             };
@@ -144,6 +145,7 @@ namespace PordznakanAPI.Controllers
                     var legalAddress = obj["legal_address"]?.ToString() ?? string.Empty;
                     var businessMarzId = obj["business_marz_id"]?.ToString() ?? string.Empty;
                     var businessAddress = obj["business_address"]?.ToString() ?? string.Empty;
+                    var email = obj["email"]?.ToString() ?? string.Empty;
 
                     var md5 = SyncHelpers.ComputeMd5(
                         instId.ToString(),
@@ -151,7 +153,8 @@ namespace PordznakanAPI.Controllers
                         legalMarzId,
                         legalAddress,
                         businessMarzId,
-                        businessAddress);
+                        businessAddress,
+                        email);
 
                     _context.NmuhInstitutionsStaging.Add(new NmuhInstitutionStaging
                     {
@@ -163,6 +166,7 @@ namespace PordznakanAPI.Controllers
                         LegalAddress = legalAddress,
                         BusinessMarzId = businessMarzId,
                         BusinessAddress = businessAddress,
+                        Email = email,
                         MD5 = md5,
                         CreatedAt = now,
                         UpdatedAt = now
@@ -195,6 +199,7 @@ namespace PordznakanAPI.Controllers
                             existing.LegalAddress = staging.LegalAddress;
                             existing.BusinessMarzId = staging.BusinessMarzId;
                             existing.BusinessAddress = staging.BusinessAddress;
+                            existing.Email = staging.Email;
                             existing.MD5 = staging.MD5;
                             existing.UpdatedAt = DateTime.UtcNow;
 
@@ -214,6 +219,7 @@ namespace PordznakanAPI.Controllers
                             LegalAddress = staging.LegalAddress,
                             BusinessMarzId = staging.BusinessMarzId,
                             BusinessAddress = staging.BusinessAddress,
+                            Email = staging.Email,
                             MD5 = staging.MD5,
                             CreatedAt = staging.CreatedAt,
                             UpdatedAt = staging.UpdatedAt
@@ -329,6 +335,7 @@ namespace PordznakanAPI.Controllers
                     LegalAddress = i.LegalAddress,
                     BusinessMarzId = i.BusinessMarzId,
                     BusinessAddress = i.BusinessAddress,
+                    Email = i.Email,
                     CreatedAt = i.CreatedAt,
                     UpdatedAt = i.UpdatedAt
                 })
@@ -352,6 +359,7 @@ namespace PordznakanAPI.Controllers
                     LegalAddress = i.LegalAddress,
                     BusinessMarzId = i.BusinessMarzId,
                     BusinessAddress = i.BusinessAddress,
+                    Email = i.Email,
                     CreatedAt = i.CreatedAt,
                     UpdatedAt = i.UpdatedAt
                 })

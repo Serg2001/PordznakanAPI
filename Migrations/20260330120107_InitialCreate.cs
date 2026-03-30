@@ -44,6 +44,7 @@ namespace PordznakanAPI.Migrations
                     LegalAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessMarzId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     MD5 = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -65,6 +66,7 @@ namespace PordznakanAPI.Migrations
                     LegalAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessMarzId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     MD5 = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -228,6 +230,7 @@ namespace PordznakanAPI.Migrations
                     LegalAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessMarzId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     MD5 = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -249,6 +252,7 @@ namespace PordznakanAPI.Migrations
                     LegalAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessMarzId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     MD5 = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -546,6 +550,7 @@ namespace PordznakanAPI.Migrations
                     Marz = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Region = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Community = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     EmployeeId = table.Column<int>(type: "int", nullable: true)

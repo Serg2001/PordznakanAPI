@@ -174,8 +174,8 @@ namespace PordznakanAPI.Controllers
                     // Parse graduated
                     var graduated = SyncHelpers.MapGraduated(studentObj["graduated"]?.ToString());
 
-                    // Parse classroom_grade
-                    var classroomGrade = SyncHelpers.MapGrade(studentObj["classroom_grade"]?.ToString());
+                    // Parse classroom_grade (comes as a quoted string, e.g. "1")
+                    int.TryParse(studentObj["classroom_grade"]?.ToString(), out var classroomGrade);
 
                     // Compute MD5
                     var md5 = SyncHelpers.ComputeMd5(

@@ -1,5 +1,3 @@
-using PordznakanAPI.Enums;
-
 namespace PordznakanAPI.DTOs
 {
     public class MmuhStudentDto
@@ -19,7 +17,7 @@ namespace PordznakanAPI.DTOs
         public string Sex { get; set; } = string.Empty;
         public bool Graduated { get; set; }
         public string GroupId { get; set; } = string.Empty;
-        public EGrade ClassroomGrade { get; set; }
+        public int ClassroomGrade { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

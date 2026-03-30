@@ -55,6 +55,7 @@ namespace PordznakanAPI.Controllers
                     Marz = s.Marz,
                     Region = s.Region,
                     Community = s.Community,
+                    Email = s.Email,
                     CreatedAt = s.CreatedAt,
                     UpdatedAt = s.UpdatedAt
                 })
@@ -400,6 +401,7 @@ namespace PordznakanAPI.Controllers
                     i.LegalAddress,
                     i.BusinessMarzId,
                     i.BusinessAddress,
+                    i.Email,
                     i.CreatedAt,
                     i.UpdatedAt
                 })
@@ -744,6 +746,7 @@ namespace PordznakanAPI.Controllers
                     i.LegalAddress,
                     i.BusinessMarzId,
                     i.BusinessAddress,
+                    i.Email,
                     i.CreatedAt,
                     i.UpdatedAt
                 })

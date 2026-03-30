@@ -10,7 +10,7 @@ namespace PordznakanAPI.DTOs
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string SocNumber { get; set; } = string.Empty;
-        public EGrade Grade { get; set; }        // ClassroomGrade
+        public int Grade { get; set; }           // ClassroomGrade
         public KtakPlace Place { get; set; }
     }
 }

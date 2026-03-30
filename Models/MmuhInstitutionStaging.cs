@@ -10,6 +10,7 @@ namespace PordznakanAPI.Models
         public string LegalAddress { get; set; } = string.Empty;
         public string BusinessMarzId { get; set; } = string.Empty;
         public string BusinessAddress { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
 
         public string MD5 { get; set; } = string.Empty;
 

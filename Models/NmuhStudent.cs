@@ -1,5 +1,3 @@
-using PordznakanAPI.Enums;
-
 namespace PordznakanAPI.Models
 {
     public class NmuhStudent
@@ -22,7 +20,7 @@ namespace PordznakanAPI.Models
         public bool Graduated { get; set; }                            // graduated (1 = true, 0 = false)
         public string EduYear { get; set; } = string.Empty;            // edu_year (e.g., "2020-2021")
         public string GroupId { get; set; } = string.Empty;            // group_id
-        public EGrade ClassroomGrade { get; set; }                     // classroom_grade
+        public int ClassroomGrade { get; set; }                        // classroom_grade
         
         public string MD5 { get; set; } = string.Empty;                // hash of important fields
 

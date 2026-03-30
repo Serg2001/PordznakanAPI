@@ -1,5 +1,3 @@
-using PordznakanAPI.Enums;
-
 namespace PordznakanAPI.Models
 {
     /// <summary>
@@ -24,7 +22,7 @@ namespace PordznakanAPI.Models
         public string Sex { get; set; } = string.Empty;                // sex (stored as string to preserve original value)
         public bool Graduated { get; set; }                            // graduated (1 = true, 0 = false)
         public string GroupId { get; set; } = string.Empty;            // group_id
-        public EGrade ClassroomGrade { get; set; }                     // classroom_grade
+        public int ClassroomGrade { get; set; }                        // classroom_grade
         
         public string MD5 { get; set; } = string.Empty;                // hash of important fields
         
