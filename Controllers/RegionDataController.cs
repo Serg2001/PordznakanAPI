@@ -31,6 +31,7 @@ namespace PordznakanAPI.Controllers
                     DshhSchoolId = s.DshhSchoolId,
                     KtakSchoolId = s.KtakSchoolId,
                     Name = s.Name,
+                    Email = s.Email,
                     Place = KtakPlace.School
                 })
                 .ToListAsync();
@@ -423,6 +424,7 @@ namespace PordznakanAPI.Controllers
                     DshhSchoolId = i.Id,
                     KtakSchoolId = i.InstId,
                     Name = i.Name,
+                    Email = i.Email,
                     Place = KtakPlace.Mmuh
                 })
                 .ToListAsync();
@@ -768,6 +770,7 @@ namespace PordznakanAPI.Controllers
                     DshhSchoolId = i.Id,
                     KtakSchoolId = i.InstId,
                     Name = i.Name,
+                    Email = i.Email,
                     Place = KtakPlace.Nmuh
                 })
                 .ToListAsync();
