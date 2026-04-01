@@ -119,7 +119,9 @@ namespace PordznakanAPI.Controllers
                             SubjectId = int.TryParse(s["subject_id"]?.ToString(), out var sid) ? sid : 0,
                             SubjectName = s["subject"]?.ToString() ?? string.Empty,
                             SubjectType = s["subject_type"]?.ToString() ?? string.Empty,
-                            SubjectTypeId = int.TryParse(s["subject_type_id"]?.ToString(), out var stid) ? stid : 0
+                            SubjectTypeId = int.TryParse(s["subject_type_id"]?.ToString(), out var stid) ? stid : 0,
+                            Grade = int.TryParse(s["grade"]?.ToString(), out var gr) ? gr : 0,
+                            SubGrade = int.TryParse(s["sub_grade"]?.ToString(), out var sgr) ? sgr : 0
                         }).ToList()
                 }).ToList();
             }

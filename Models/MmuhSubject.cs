@@ -8,6 +8,8 @@ namespace PordznakanAPI.Models
         public string SubjectName { get; set; } = string.Empty;  // subject from API
         public string SubjectType { get; set; } = string.Empty;  // subject_type from API
         public int SubjectTypeId { get; set; }                   // subject_type_id from API
+        public int Grade { get; set; }                           // grade
+        public int SubGrade { get; set; }                        // sub grade
 
         public MmuhStaffGroup MmuhStaffGroup { get; set; } = null!;
     }

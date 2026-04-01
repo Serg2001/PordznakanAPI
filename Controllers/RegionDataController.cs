@@ -250,6 +250,35 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
+        /// Returns school teachers with a flat list of subject names for the given school.
+        /// </summary>
+        [HttpGet("teachers/with-subjects/by-school/{schoolId}")]
+        public async Task<IActionResult> GetTeachersWithSubjectsBySchool([FromRoute] int schoolId)
+        {
+            var teachers = await _context.Teachers
+                .Include(t => t.Subjects)
+                .Where(t => t.KtakSchoolId == schoolId)
+                .ToListAsync();
+
+            var result = teachers.Select(t => new
+            {
+                t.Id,
+                t.KtakTeacherId,
+                t.KtakSchoolId,
+                t.FirstName,
+                t.LastName,
+                t.SocNumber,
+                t.Place,
+                Subjects = t.Subjects
+                    .Select(s => s.Name)
+                    .Distinct()
+                    .ToList()
+            });
+
+            return Ok(result);
+        }
+
+        /// <summary>
         /// T.3 – Returns FirstName, LastName, SocNumber, and DigitLevel for every teacher in the given school.
         /// </summary>
         [HttpGet("teachers/summary/by-region/{regionId}")]
@@ -701,6 +730,36 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
+        /// Returns MMUH teachers (PositionName == "Դասախոս") with their groups and subjects for the given institution.
+        /// </summary>
+        [HttpGet("mmuh-teachers/with-subjects/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMmuhTeachersWithSubjectsByInstitution([FromRoute] int institutionId)
+        {
+            var teachers = await _context.MmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
+                .Where(s => s.InstId == institutionId && s.PositionName == "Դասախոս")
+                .ToListAsync();
+
+            var result = teachers.Select(s => new
+            {
+                Id = s.Id,
+                KtakTeacherId = s.MmuhStaffId,
+                KtakSchoolId = s.InstId,
+                FirstName = s.FirstName,
+                LastName = s.LastName,
+                SocNumber = s.SocNumber,
+                Place = KtakPlace.Mmuh,
+                Subjects = s.Groups
+                    .SelectMany(g => g.Subjects.Select(sub => sub.SubjectName))
+                    .Distinct()
+                    .ToList()
+            });
+
+            return Ok(result);
+        }
+
+        /// <summary>
         /// Returns FirstName, LastName, KtakTeacherId and KtakSchoolId for an MMUH teacher
         /// identified by InstId and SocNumber.
         /// </summary>
@@ -1045,6 +1104,36 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
+        /// Returns NMUH teachers (PositionName == "Դասախոս") with their groups and subjects for the given institution.
+        /// </summary>
+        [HttpGet("nmuh-teachers/with-subjects/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetNmuhTeachersWithSubjectsByInstitution([FromRoute] int institutionId)
+        {
+            var teachers = await _context.NmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
+                .Where(s => s.InstId == institutionId && s.PositionName == "Դասախոս")
+                .ToListAsync();
+
+            var result = teachers.Select(s => new
+            {
+                Id = s.Id,
+                KtakTeacherId = s.NmuhStaffId,
+                KtakSchoolId = s.InstId,
+                FirstName = s.FirstName,
+                LastName = s.LastName,
+                SocNumber = s.SocNumber,
+                Place = KtakPlace.Nmuh,
+                Subjects = s.Groups
+                    .SelectMany(g => g.Subjects.Select(sub => sub.SubjectName))
+                    .Distinct()
+                    .ToList()
+            });
+
+            return Ok(result);
+        }
+
+        /// <summary>
         /// Returns FirstName, LastName, KtakTeacherId and KtakSchoolId for an NMUH teacher
         /// identified by InstId and SocNumber.
         /// </summary>
@@ -1081,7 +1170,7 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetDirectorsByRegion([FromRoute] int regionId)
         {
             var directors = await _context.Employees
-                .Where(e => e.Position == "Տնօրեն" && e.DirectedSchools.Any(s => s.RegionId == regionId))
+                .Where(e => (e.Position == "Տնօրեն" || e.Position == "Վարչատնտեսական համակարգող") && e.DirectedSchools.Any(s => s.RegionId == regionId))
                 .Select(e => new
                 {
                     e.Id,

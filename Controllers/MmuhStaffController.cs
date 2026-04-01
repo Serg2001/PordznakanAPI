@@ -80,7 +80,9 @@ namespace PordznakanAPI.Controllers
                                 SubjectId = sid,
                                 SubjectName = subObj["subject"]?.ToString() ?? string.Empty,
                                 SubjectType = subObj["subject_type"]?.ToString() ?? string.Empty,
-                                SubjectTypeId = int.TryParse(subObj["subject_type_id"]?.ToString(), out var stid) ? stid : 0
+                                SubjectTypeId = int.TryParse(subObj["subject_type_id"]?.ToString(), out var stid) ? stid : 0,
+                                Grade = int.TryParse(subObj["grade"]?.ToString(), out var gr) ? gr : 0,
+                                SubGrade = int.TryParse(subObj["sub_grade"]?.ToString(), out var sgr) ? sgr : 0
                             });
                         }
                     }
