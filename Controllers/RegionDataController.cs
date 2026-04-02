@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
@@ -327,26 +327,20 @@ namespace PordznakanAPI.Controllers
             [FromRoute] int schoolId,
             [FromRoute] string socNumber)
         {
-            var teacher = await _context.Teachers
+            var teacherEntity = await _context.Teachers
                 .Include(t => t.Subjects)
                 .Where(t => t.KtakSchoolId == schoolId && t.SocNumber == socNumber)
-                .Select(t => new
-                {
-                    t.FirstName,
-                    t.LastName,
-                    t.KtakTeacherId,
-                    t.DigitLevel,
-                    Place = KtakPlace.School,
-                    Subjects = t.Subjects.Select(s => new
-                    {
-                        s.Id,
-                        s.SubjectId,
-                        s.Grade,
-                        s.SubGrade,
-                        s.Name
-                    })
-                })
                 .FirstOrDefaultAsync();
+
+            var teacher = teacherEntity == null ? null : new
+            {
+                teacherEntity.FirstName,
+                teacherEntity.LastName,
+                teacherEntity.KtakTeacherId,
+                teacherEntity.DigitLevel,
+                Place = KtakPlace.School,
+                Subjects = teacherEntity.Subjects.Select(s => s.Name).Distinct().ToList()
+            };
 
             if (teacher == null)
                 return NotFound(new { message = $"No teacher found for schoolId={schoolId} and socNumber={socNumber}" });
@@ -768,18 +762,25 @@ namespace PordznakanAPI.Controllers
             [FromRoute] int institutionId,
             [FromRoute] string socNumber)
         {
-            var teacher = await _context.MmuhStaff
+            var mmuhEntity = await _context.MmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
-                .Select(s => new
-                {
-                    Id = s.Id,
-                    KtakTeacherId = s.MmuhStaffId,
-                    KtakSchoolId = s.InstId,
-                    FirstName = s.FirstName,
-                    LastName = s.LastName,
-                    Place = KtakPlace.Mmuh
-                })
                 .FirstOrDefaultAsync();
+
+            var teacher = mmuhEntity == null ? null : new
+            {
+                Id = mmuhEntity.Id,
+                KtakTeacherId = mmuhEntity.MmuhStaffId,
+                KtakSchoolId = mmuhEntity.InstId,
+                FirstName = mmuhEntity.FirstName,
+                LastName = mmuhEntity.LastName,
+                Place = KtakPlace.Mmuh,
+                Subjects = mmuhEntity.Groups
+                    .SelectMany(g => g.Subjects.Select(s => s.SubjectName))
+                    .Distinct()
+                    .ToList()
+            };
 
             if (teacher == null)
                 return NotFound(new { message = $"No MMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
@@ -1142,18 +1143,25 @@ namespace PordznakanAPI.Controllers
             [FromRoute] int institutionId,
             [FromRoute] string socNumber)
         {
-            var teacher = await _context.NmuhStaff
+            var nmuhEntity = await _context.NmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
-                .Select(s => new
-                {
-                    Id = s.Id,
-                    KtakTeacherId = s.NmuhStaffId,
-                    KtakSchoolId = s.InstId,
-                    FirstName = s.FirstName,
-                    LastName = s.LastName,
-                    Place = KtakPlace.Nmuh
-                })
                 .FirstOrDefaultAsync();
+
+            var teacher = nmuhEntity == null ? null : new
+            {
+                Id = nmuhEntity.Id,
+                KtakTeacherId = nmuhEntity.NmuhStaffId,
+                KtakSchoolId = nmuhEntity.InstId,
+                FirstName = nmuhEntity.FirstName,
+                LastName = nmuhEntity.LastName,
+                Place = KtakPlace.Nmuh,
+                Subjects = nmuhEntity.Groups
+                    .SelectMany(g => g.Subjects.Select(s => s.SubjectName))
+                    .Distinct()
+                    .ToList()
+            };
 
             if (teacher == null)
                 return NotFound(new { message = $"No NMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
@@ -1169,31 +1177,24 @@ namespace PordznakanAPI.Controllers
         [HttpGet("directors/by-region/{regionId}")]
         public async Task<IActionResult> GetDirectorsByRegion([FromRoute] int regionId)
         {
-            var directors = await _context.Employees
-                .Where(e => (e.Position == "Տնօրեն" || e.Position == "Վարչատնտեսական համակարգող") && e.DirectedSchools.Any(s => s.RegionId == regionId))
+            var directors = await _context.SchoolEmployees
+                .Where(e => e.RegionId == regionId &&
+                            (e.Position == "Տնօրեն" || e.Position == "Վարչատնտեսական համակարգող"))
                 .Select(e => new
                 {
                     e.Id,
-                    e.ExternalPersonId,
-                    e.Ssn,
+                    e.PersonId,
+                    e.SchoolId,
+                    e.RegionId,
                     e.FirstName,
                     e.LastName,
                     e.FatherName,
+                    e.SocNumber,
                     e.Phone,
                     e.Position,
+                    e.StaffGroup,
                     e.CreatedAt,
-                    e.UpdatedAt,
-                    DirectedSchools = e.DirectedSchools
-                        .Where(s => s.RegionId == regionId)
-                        .Select(s => new
-                        {
-                            s.DshhSchoolId,
-                            s.KtakSchoolId,
-                            s.Name,
-                            s.Marz,
-                            s.Region,
-                            s.Community
-                        })
+                    e.UpdatedAt
                 })
                 .ToListAsync();
 
