@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
@@ -334,6 +334,7 @@ namespace PordznakanAPI.Controllers
 
             var teacher = teacherEntity == null ? null : new
             {
+                teacherEntity.Id,
                 teacherEntity.FirstName,
                 teacherEntity.LastName,
                 teacherEntity.KtakTeacherId,
@@ -361,6 +362,7 @@ namespace PordznakanAPI.Controllers
                 .Where(p => p.KtakSchoolId == schoolId && p.SocNumber == socNumber)
                 .Select(p => new
                 {
+                    p.Id,
                     p.FirstName,
                     p.KtakPupilId,
                     p.LastName,
