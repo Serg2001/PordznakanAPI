@@ -4,6 +4,7 @@ using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Enums;
 using PordznakanAPI.Models;
+using System.Net.Http.Json;
 
 namespace PordznakanAPI.Controllers
 {
@@ -12,10 +13,14 @@ namespace PordznakanAPI.Controllers
     public class RegionDataController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
 
-        public RegionDataController(AppDbContext context)
+        public RegionDataController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _context = context;
+            _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -187,6 +192,11 @@ namespace PordznakanAPI.Controllers
                     t.WorkType,
                     t.CreatedAt,
                     t.UpdatedAt,
+                    SchoolName = _context.Schools
+                        .Where(sch => sch.KtakSchoolId == t.KtakSchoolId)
+                        .Select(sch => sch.Name)
+                        .FirstOrDefault(),
+                    SubjectNames = t.Subjects.Select(s => s.Name).Distinct().ToList(),
                     Subjects = t.Subjects.Select(s => new
                     {
                         s.Id,
@@ -235,6 +245,11 @@ namespace PordznakanAPI.Controllers
                     t.WorkType,
                     t.CreatedAt,
                     t.UpdatedAt,
+                    SchoolName = _context.Schools
+                        .Where(sch => sch.KtakSchoolId == t.KtakSchoolId)
+                        .Select(sch => sch.Name)
+                        .FirstOrDefault(),
+                    SubjectNames = t.Subjects.Select(s => s.Name).Distinct().ToList(),
                     Subjects = t.Subjects.Select(s => new
                     {
                         s.Id,
@@ -255,6 +270,11 @@ namespace PordznakanAPI.Controllers
         [HttpGet("teachers/with-subjects/by-school/{schoolId}")]
         public async Task<IActionResult> GetTeachersWithSubjectsBySchool([FromRoute] int schoolId)
         {
+            var schoolName = await _context.Schools
+                .Where(s => s.KtakSchoolId == schoolId)
+                .Select(s => s.Name)
+                .FirstOrDefaultAsync();
+
             var teachers = await _context.Teachers
                 .Include(t => t.Subjects)
                 .Where(t => t.KtakSchoolId == schoolId)
@@ -268,11 +288,12 @@ namespace PordznakanAPI.Controllers
                 t.FirstName,
                 t.LastName,
                 t.SocNumber,
+                t.Phone,
+                t.Address,
+                t.DigitLevel,
                 t.Place,
-                Subjects = t.Subjects
-                    .Select(s => s.Name)
-                    .Distinct()
-                    .ToList()
+                SchoolName = schoolName,
+                SubjectNames = t.Subjects.Select(s => s.Name).Distinct().ToList()
             });
 
             return Ok(result);
@@ -291,7 +312,14 @@ namespace PordznakanAPI.Controllers
                     t.FirstName,
                     t.LastName,
                     t.SocNumber,
-                    t.DigitLevel
+                    t.Phone,
+                    t.Address,
+                    t.DigitLevel,
+                    SchoolName = _context.Schools
+                        .Where(s => s.KtakSchoolId == t.KtakSchoolId)
+                        .Select(s => s.Name)
+                        .FirstOrDefault(),
+                    SubjectNames = t.Subjects.Select(s => s.Name).Distinct().ToList()
                 })
                 .ToListAsync();
 
@@ -304,6 +332,11 @@ namespace PordznakanAPI.Controllers
         [HttpGet("teachers/summary/by-school/{schoolId}")]
         public async Task<IActionResult> GetTeacherSummaryBySchool([FromRoute] int schoolId)
         {
+            var schoolName = await _context.Schools
+                .Where(s => s.KtakSchoolId == schoolId)
+                .Select(s => s.Name)
+                .FirstOrDefaultAsync();
+
             var teachers = await _context.Teachers
                 .Where(t => t.KtakSchoolId == schoolId)
                 .Select(t => new
@@ -311,7 +344,11 @@ namespace PordznakanAPI.Controllers
                     t.FirstName,
                     t.LastName,
                     t.SocNumber,
-                    t.DigitLevel
+                    t.Phone,
+                    t.Address,
+                    t.DigitLevel,
+                    SchoolName = schoolName,
+                    SubjectNames = t.Subjects.Select(s => s.Name).Distinct().ToList()
                 })
                 .ToListAsync();
 
@@ -332,19 +369,27 @@ namespace PordznakanAPI.Controllers
                 .Where(t => t.KtakSchoolId == schoolId && t.SocNumber == socNumber)
                 .FirstOrDefaultAsync();
 
-            var teacher = teacherEntity == null ? null : new
+            if (teacherEntity == null)
+                return NotFound(new { message = $"No teacher found for schoolId={schoolId} and socNumber={socNumber}" });
+
+            var schoolName = await _context.Schools
+                .Where(s => s.KtakSchoolId == schoolId)
+                .Select(s => s.Name)
+                .FirstOrDefaultAsync();
+
+            var teacher = new
             {
                 teacherEntity.Id,
                 teacherEntity.FirstName,
                 teacherEntity.LastName,
                 teacherEntity.KtakTeacherId,
                 teacherEntity.DigitLevel,
+                Phone = teacherEntity.Phone,
+                Address = teacherEntity.Address,
+                SchoolName = schoolName,
                 Place = KtakPlace.School,
-                Subjects = teacherEntity.Subjects.Select(s => s.Name).Distinct().ToList()
+                SubjectNames = teacherEntity.Subjects.Select(s => s.Name).Distinct().ToList()
             };
-
-            if (teacher == null)
-                return NotFound(new { message = $"No teacher found for schoolId={schoolId} and socNumber={socNumber}" });
 
             return Ok(teacher);
         }
@@ -709,20 +754,27 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetMmuhTeachersByInstitution([FromRoute] int institutionId)
         {
             var teachers = await _context.MmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.InstId == institutionId && s.PositionName == "Դասախոս")
-                .Select(s => new MmuhTeacherSummaryDto
-                {
-                    Id = s.Id,
-                    KtakTeacherId = s.MmuhStaffId,
-                    KtakSchoolId = s.InstId,
-                    FirstName = s.FirstName,
-                    LastName = s.LastName,
-                    SocNumber = s.SocNumber,
-                    Place = KtakPlace.Mmuh
-                })
                 .ToListAsync();
 
-            return Ok(teachers);
+            var result = teachers.Select(s => new
+            {
+                Id = s.Id,
+                KtakTeacherId = s.MmuhStaffId,
+                KtakSchoolId = s.InstId,
+                FirstName = s.FirstName,
+                LastName = s.LastName,
+                SocNumber = s.SocNumber,
+                Phone = s.Phone,
+                Address = s.Address,
+                SchoolName = s.InstName,
+                SubjectNames = s.Groups.SelectMany(g => g.Subjects.Select(sub => sub.SubjectName)).Distinct().ToList(),
+                Place = KtakPlace.Mmuh
+            });
+
+            return Ok(result);
         }
 
         /// <summary>
@@ -745,8 +797,11 @@ namespace PordznakanAPI.Controllers
                 FirstName = s.FirstName,
                 LastName = s.LastName,
                 SocNumber = s.SocNumber,
+                Phone = s.Phone,
+                Address = s.Address,
+                SchoolName = s.InstName,
                 Place = KtakPlace.Mmuh,
-                Subjects = s.Groups
+                SubjectNames = s.Groups
                     .SelectMany(g => g.Subjects.Select(sub => sub.SubjectName))
                     .Distinct()
                     .ToList()
@@ -770,22 +825,25 @@ namespace PordznakanAPI.Controllers
                 .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
                 .FirstOrDefaultAsync();
 
-            var teacher = mmuhEntity == null ? null : new
+            if (mmuhEntity == null)
+                return NotFound(new { message = $"No MMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
+
+            var teacher = new
             {
                 Id = mmuhEntity.Id,
                 KtakTeacherId = mmuhEntity.MmuhStaffId,
                 KtakSchoolId = mmuhEntity.InstId,
                 FirstName = mmuhEntity.FirstName,
                 LastName = mmuhEntity.LastName,
+                Phone = mmuhEntity.Phone,
+                Address = mmuhEntity.Address,
+                SchoolName = mmuhEntity.InstName,
                 Place = KtakPlace.Mmuh,
-                Subjects = mmuhEntity.Groups
+                SubjectNames = mmuhEntity.Groups
                     .SelectMany(g => g.Subjects.Select(s => s.SubjectName))
                     .Distinct()
                     .ToList()
             };
-
-            if (teacher == null)
-                return NotFound(new { message = $"No MMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
 
             return Ok(teacher);
         }
@@ -1090,20 +1148,27 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetNmuhTeachersByInstitution([FromRoute] int institutionId)
         {
             var teachers = await _context.NmuhStaff
+                .Include(s => s.Groups)
+                    .ThenInclude(g => g.Subjects)
                 .Where(s => s.InstId == institutionId && s.PositionName == "Դասախոս")
-                .Select(s => new NmuhTeacherSummaryDto
-                {
-                    Id = s.Id,
-                    KtakTeacherId = s.NmuhStaffId,
-                    KtakSchoolId = s.InstId,
-                    FirstName = s.FirstName,
-                    LastName = s.LastName,
-                    SocNumber = s.SocNumber,
-                    Place = KtakPlace.Nmuh
-                })
                 .ToListAsync();
 
-            return Ok(teachers);
+            var result = teachers.Select(s => new
+            {
+                Id = s.Id,
+                KtakTeacherId = s.NmuhStaffId,
+                KtakSchoolId = s.InstId,
+                FirstName = s.FirstName,
+                LastName = s.LastName,
+                SocNumber = s.SocNumber,
+                Phone = s.Phone,
+                Address = s.Address,
+                SchoolName = s.InstName,
+                SubjectNames = s.Groups.SelectMany(g => g.Subjects.Select(sub => sub.SubjectName)).Distinct().ToList(),
+                Place = KtakPlace.Nmuh
+            });
+
+            return Ok(result);
         }
 
         /// <summary>
@@ -1126,8 +1191,11 @@ namespace PordznakanAPI.Controllers
                 FirstName = s.FirstName,
                 LastName = s.LastName,
                 SocNumber = s.SocNumber,
+                Phone = s.Phone,
+                Address = s.Address,
+                SchoolName = s.InstName,
                 Place = KtakPlace.Nmuh,
-                Subjects = s.Groups
+                SubjectNames = s.Groups
                     .SelectMany(g => g.Subjects.Select(sub => sub.SubjectName))
                     .Distinct()
                     .ToList()
@@ -1151,22 +1219,25 @@ namespace PordznakanAPI.Controllers
                 .Where(s => s.InstId == institutionId && s.SocNumber == socNumber && s.PositionName == "Դասախոս")
                 .FirstOrDefaultAsync();
 
-            var teacher = nmuhEntity == null ? null : new
+            if (nmuhEntity == null)
+                return NotFound(new { message = $"No NMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
+
+            var teacher = new
             {
                 Id = nmuhEntity.Id,
                 KtakTeacherId = nmuhEntity.NmuhStaffId,
                 KtakSchoolId = nmuhEntity.InstId,
                 FirstName = nmuhEntity.FirstName,
                 LastName = nmuhEntity.LastName,
+                Phone = nmuhEntity.Phone,
+                Address = nmuhEntity.Address,
+                SchoolName = nmuhEntity.InstName,
                 Place = KtakPlace.Nmuh,
-                Subjects = nmuhEntity.Groups
+                SubjectNames = nmuhEntity.Groups
                     .SelectMany(g => g.Subjects.Select(s => s.SubjectName))
                     .Distinct()
                     .ToList()
             };
-
-            if (teacher == null)
-                return NotFound(new { message = $"No NMUH teacher found for institutionId={institutionId} and socNumber={socNumber}" });
 
             return Ok(teacher);
         }
@@ -1620,6 +1691,28 @@ namespace PordznakanAPI.Controllers
                 return NotFound(new { message = $"SchoolEmployee {id} not found." });
 
             return Ok(employee);
+        }
+
+        // ── Exempt endpoints ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Forwards a pupil-exemption request to the external CRM API and relays the response.
+        /// Protected by X-API-KEY header (IncomingApiKey). Attaches OutgoingApiKey when calling CRM.
+        /// </summary>
+        [HttpPost("pupils/exempt")]
+        public async Task<IActionResult> ExemptPupils([FromBody] StudentExempt payload)
+        {
+            var client = _httpClientFactory.CreateClient("ktakapi");
+
+            var outgoingKey = _configuration["Integration:OutgoingApiKey"];
+            client.DefaultRequestHeaders.Remove("X-API-KEY");
+            client.DefaultRequestHeaders.Add("X-API-KEY", outgoingKey);
+
+            var response = await client.PostAsJsonAsync("exempt-pupils", payload);
+
+            var body = await response.Content.ReadAsStringAsync();
+
+            return StatusCode((int)response.StatusCode, body);
         }
     }
 }
