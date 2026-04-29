@@ -42,7 +42,7 @@ builder.Services.AddHangfireServer();
 
 builder.Services.AddHttpClient("ktakapi", httpClient =>
 {
-    httpClient.BaseAddress = new Uri("https://crmapi.dshh.am/api/Integration/");
+    httpClient.BaseAddress = new Uri("https://crmapi.dshh.am/api/integration/");
     httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 }).ConfigurePrimaryHttpMessageHandler(() =>
 {
