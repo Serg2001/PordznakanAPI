@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
@@ -1702,17 +1702,34 @@ namespace PordznakanAPI.Controllers
         [HttpPost("pupils/exempt")]
         public async Task<IActionResult> ExemptPupils([FromBody] StudentExempt payload)
         {
-            var client = _httpClientFactory.CreateClient("ktakapi");
+            try
+            {
+                var client = _httpClientFactory.CreateClient("ktakapi");
 
-            var outgoingKey = _configuration["Integration:OutgoingApiKey"];
-            client.DefaultRequestHeaders.Remove("X-API-KEY");
-            client.DefaultRequestHeaders.Add("X-API-KEY", outgoingKey);
+                var outgoingKey = _configuration["Integration:OutgoingApiKey"];
+                client.DefaultRequestHeaders.Remove("X-API-KEY");
+                client.DefaultRequestHeaders.Add("X-API-KEY", outgoingKey);
 
-            var response = await client.PostAsJsonAsync("exempt-pupils", payload);
+                var response = await client.PostAsJsonAsync("exempt-pupils", payload);
+                var body = await response.Content.ReadAsStringAsync();
 
-            var body = await response.Content.ReadAsStringAsync();
-
-            return StatusCode((int)response.StatusCode, body);
+                if (response.IsSuccessStatusCode)
+                    return Ok(new { status = 1, msg = body });
+                else
+                    return Ok(new { status = -1, msg = body });
+            }
+            catch (HttpRequestException ex)
+            {
+                return Ok(new { status = -1, msg = $"Failed to reach CRM API: {ex.Message}" });
+            }
+            catch (TaskCanceledException ex)
+            {
+                return Ok(new { status = -1, msg = $"CRM API request timed out: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { status = -1, msg = $"Unexpected error: {ex.Message}" });
+            }
         }
     }
 }
