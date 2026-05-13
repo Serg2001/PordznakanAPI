@@ -8,11 +8,13 @@ namespace PordznakanAPI.Services
     public class LogTransferService : ILogTransferService
     {
         private readonly ILogger<LogTransferService> _logger;
-        private const string BulkUpdateUrl = "https://demo.dshh.am:1400/api/bulk-update";
+        private readonly IConfiguration _configuration;
+        private const string BulkUpdateUrl = "https://crmapi.dshh.am/api/integration/update";
 
-        public LogTransferService(ILogger<LogTransferService> logger)
+        public LogTransferService(ILogger<LogTransferService> logger, IConfiguration configuration)
         {
             _logger = logger;
+            _configuration = configuration;
         }
 
         public async Task<JArray> FetchLogsForRegionAsync(string sourceBaseUrl, int regionId, DateOnly date)
@@ -46,6 +48,11 @@ namespace PordznakanAPI.Services
         public async Task SendBulkAsync<T>(IList<T> logs)
         {
             using var client = new HttpClient();
+
+            var outgoingKey = _configuration["Integration:OutgoingApiKey"];
+            if (!string.IsNullOrWhiteSpace(outgoingKey))
+                client.DefaultRequestHeaders.Add("X-API-KEY", outgoingKey);
+
             var json = JsonConvert.SerializeObject(logs);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync(BulkUpdateUrl, content);
