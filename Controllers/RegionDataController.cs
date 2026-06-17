@@ -1443,6 +1443,10 @@ namespace PordznakanAPI.Controllers
                     t.WorkType,
                     t.CreatedAt,
                     t.UpdatedAt,
+                    SchoolName = _context.Schools
+                        .Where(sch => sch.KtakSchoolId == t.KtakSchoolId)
+                        .Select(sch => sch.Name)
+                        .FirstOrDefault(),
                     Subjects = t.Subjects.Select(s => new
                     {
                         s.Id,
@@ -1514,6 +1518,7 @@ namespace PordznakanAPI.Controllers
                     s.InternalSchoolId,
                     s.RegionId,
                     s.InstName,
+                    SchoolName = s.InstName,
                     s.FirstName,
                     s.LastName,
                     s.FatherName,
@@ -1611,6 +1616,7 @@ namespace PordznakanAPI.Controllers
                     s.InstId,
                     s.RegionId,
                     s.InstName,
+                    SchoolName = s.InstName,
                     s.FirstName,
                     s.LastName,
                     s.FatherName,
