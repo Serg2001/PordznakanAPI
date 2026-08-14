@@ -175,10 +175,10 @@ namespace PordznakanAPI.Controllers
             {
                 return level switch
                 {
-                    1 => EDigitLevel.C1,
-                    2 => EDigitLevel.C2,
-                    3 => EDigitLevel.C3,
-                    4 => EDigitLevel.C4,
+                    341 => EDigitLevel.D1,
+                    342 => EDigitLevel.D2,
+                    344 => EDigitLevel.D3,
+                    346 => EDigitLevel.D4,
                     _ => EDigitLevel.Unknown
                 };
             }

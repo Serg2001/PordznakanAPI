@@ -114,28 +114,32 @@ namespace PordznakanAPI.Controllers
         {
             var pupils = await _context.Pupils
                 .Where(p => p.KtakSchoolId == schoolId && p.Status == EPupilStatus.New)
-                .Select(p => new PupilDto
+                .Select(p => new
                 {
-                    Id = p.Id,
-                    KtakPupilId = p.KtakPupilId,
-                    KtakSchoolId = p.KtakSchoolId,
-                    RegionId = p.RegionId,
-                    ClassroomId = p.ClassroomId,
-                    ClassroomInternalId = p.ClassroomInternalId,
-                    Place = p.Place,
-                    Grade = p.Grade,
-                    SubGrade = p.SubGrade,
-                    FirstName = p.FirstName,
-                    LastName = p.LastName,
-                    FatherName = p.FatherName,
-                    CertificateType = p.CertificateType,
-                    Certificate = p.Certificate,
-                    SocNumber = p.SocNumber,
-                    Birthday = p.Birthday,
-                    Gender = p.Gender,
-                    Status = p.Status,
-                    CreatedAt = p.CreatedAt,
-                    UpdatedAt = p.UpdatedAt
+                    p.Id,
+                    p.KtakPupilId,
+                    p.KtakSchoolId,
+                    SchoolName = _context.Schools
+                        .Where(s => s.KtakSchoolId == p.KtakSchoolId)
+                        .Select(s => s.Name)
+                        .FirstOrDefault(),
+                    p.RegionId,
+                    p.ClassroomId,
+                    p.ClassroomInternalId,
+                    p.Place,
+                    p.Grade,
+                    p.SubGrade,
+                    p.FirstName,
+                    p.LastName,
+                    p.FatherName,
+                    p.CertificateType,
+                    p.Certificate,
+                    p.SocNumber,
+                    p.Birthday,
+                    p.Gender,
+                    p.Status,
+                    p.CreatedAt,
+                    p.UpdatedAt
                 })
                 .ToListAsync();
 
