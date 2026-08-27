@@ -294,6 +294,7 @@ namespace PordznakanAPI.Controllers
                 t.SocNumber,
                 t.Phone,
                 t.Address,
+                t.Email,
                 t.DigitLevel,
                 t.Place,
                 SchoolName = schoolName,
