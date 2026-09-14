@@ -113,7 +113,8 @@ namespace PordznakanAPI.Controllers
         public async Task<IActionResult> GetPupilsBySchool([FromRoute] int schoolId)
         {
             var pupils = await _context.Pupils
-                .Where(p => p.KtakSchoolId == schoolId && p.Status == EPupilStatus.New)
+                .Where(p => p.KtakSchoolId == schoolId &&
+                            (p.Status == EPupilStatus.New || p.Status == EPupilStatus.HaytAdmission))
                 .Select(p => new
                 {
                     p.Id,

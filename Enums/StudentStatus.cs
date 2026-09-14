@@ -6,6 +6,11 @@
         New,
         Repeater,
         Incomplete,
-        Graduated
+        Graduated,
+        /// <summary>
+        /// "hayt_admission" — supplied by data-api.emis.am. Appended so the value is not
+        /// silently folded into New; existing members keep their stored numbers.
+        /// </summary>
+        HaytAdmission
     }
 }

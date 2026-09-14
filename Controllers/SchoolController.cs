@@ -6,6 +6,7 @@ using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Models;
 using PordznakanAPI.Enums;
+using PordznakanAPI.Services;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -47,11 +48,13 @@ namespace PordznakanAPI.Controllers
     public class PupilController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<PupilController>? _logger;
 
-        public PupilController(AppDbContext context, ILogger<PupilController>? logger = null)
+        public PupilController(AppDbContext context, IHttpClientFactory httpClientFactory, ILogger<PupilController>? logger = null)
         {
             _context = context;
+            _httpClientFactory = httpClientFactory;
             _logger = logger;
         }
 
@@ -152,6 +155,14 @@ namespace PordznakanAPI.Controllers
         }
 
         // === Helper mappers for enums ===
+        private static string Truncate(string? value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
+        }
+
         private static EGrade MapGrade(string? grade)
         {
             if (int.TryParse(grade, out var g) && g >= 1 && g <= 12)
@@ -191,37 +202,81 @@ namespace PordznakanAPI.Controllers
             };
         }
 
+        // ident_document codes used by data-api.emis.am. The retired api.emis.am used a
+        // completely different dictionary (1017 = birth certificate, 973 = passport, ...),
+        // so both are mapped here and neither may be resolved by numeric value: the new
+        // codes overlap ECertificateType's own low numbers with different meanings.
+        private static readonly Dictionary<string, ECertificateType> DocumentTypeCodes = new()
+        {
+            // data-api.emis.am (current)
+            ["8"] = ECertificateType.HHCertificate,   // ԱԲ214015 – birth certificate
+            ["4"] = ECertificateType.HHPasport,       // AX0268329 – HH passport
+
+            // api.emis.am (legacy, kept so a re-point at the old host still maps)
+            ["1017"] = ECertificateType.HHCertificate,
+            ["973"] = ECertificateType.HHPasport,
+            ["974"] = ECertificateType.IDCard,
+            ["975"] = ECertificateType.RefugeePassport,
+            ["976"] = ECertificateType.StatelessPasport,
+            ["1013"] = ECertificateType.BiometricPassport,
+            ["1014"] = ECertificateType.ForeignDocument,
+            ["1015"] = ECertificateType.ConventionCard,
+            ["1016"] = ECertificateType.ResidenceCard,
+            ["1018"] = ECertificateType.Other,
+            ["1061"] = ECertificateType.TravelDocument
+        };
+
         private static ECertificateType MapCertificateType(string? code)
         {
             if (string.IsNullOrWhiteSpace(code))
                 return ECertificateType.Unknown;
 
-            // If API already returns numeric code matching enum values
-            if (int.TryParse(code, out var numeric) && Enum.IsDefined(typeof(ECertificateType), numeric))
-            {
-                return (ECertificateType)numeric;
-            }
+            var normalized = code.Trim();
+
+            if (DocumentTypeCodes.TryGetValue(normalized, out var mapped))
+                return mapped;
 
             // Fallback simple name-based mapping
-            var normalized = code.Trim().ToLowerInvariant();
-            if (normalized.Contains("birth"))
+            var lowered = normalized.ToLowerInvariant();
+            if (lowered.Contains("birth"))
                 return ECertificateType.HHCertificate;
-            if (normalized.Contains("passport"))
+            if (lowered.Contains("passport"))
                 return ECertificateType.HHPasport;
 
+            // Codes 5, 6, 7, 9 and 10 (~1.5% of pupils) are not confirmed with EMIS yet;
+            // SyncRegionInternal logs every unmapped code it sees so they can be added here.
             return ECertificateType.Other;
         }
 
+        private static bool IsKnownDocumentCode(string? code) =>
+            !string.IsNullOrWhiteSpace(code) && DocumentTypeCodes.ContainsKey(code.Trim());
+
         private static bool MapGender(string? sexCode)
         {
-            // Adjust mapping according to real API semantics.
-            // For now: treat "47" or "1" as male, everything else as female/false.
+            // data-api.emis.am: 3 = male, 4 = female.
+            // api.emis.am (legacy): 48 = male, 47 = female — the previous mapping had
+            // these two the wrong way round, which stored every gender inverted.
             var v = sexCode?.Trim();
-            return v == "47" || v == "1" || string.Equals(v, "m", StringComparison.OrdinalIgnoreCase);
+
+            return v switch
+            {
+                "3" or "48" or "1" => true,
+                "4" or "47" or "2" => false,
+                _ => string.Equals(v, "m", StringComparison.OrdinalIgnoreCase)
+            };
+        }
+
+        private static bool IsKnownSexCode(string? code)
+        {
+            var v = code?.Trim();
+            return v is "3" or "4" or "48" or "47" or "1" or "2";
         }
 
         private static EPupilStatus MapPupilStatus(string? status)
         {
+            // data-api.emis.am returns only currently enrolled pupils and leaves status
+            // null for them, so null keeps meaning New — that is what "active pupil"
+            // endpoints such as RegionData 1.4 filter on.
             if (string.IsNullOrWhiteSpace(status))
                 return EPupilStatus.New;
 
@@ -233,6 +288,7 @@ namespace PordznakanAPI.Controllers
                 "repeater" => EPupilStatus.Repeater,
                 "incomplete" => EPupilStatus.Incomplete,
                 "graduated" => EPupilStatus.Graduated,
+                "hayt_admission" => EPupilStatus.HaytAdmission,
                 _ => EPupilStatus.New
             };
         }
@@ -328,16 +384,43 @@ namespace PordznakanAPI.Controllers
 
             try
             {
-                using var client = new HttpClient();
-                string url = $"https://api.emis.am/V1/getAllData/{regionId}";
-                var responseText = await client.GetStringAsync(url);
-                var json = JObject.Parse(responseText);
+                // Dedicated getAllData client: base address (https://data-api.emis.am/v1/),
+                // the required X-Api-Token header, gzip and retries. Scoped to this endpoint
+                // only — see Program.cs / appsettings.json.
+                var client = _httpClientFactory.CreateClient(EmisClients.GetAllData);
+                var fetchStarted = DateTime.UtcNow;
+
+                using var response = await client.GetAsync($"getAllData/{regionId}", HttpCompletionOption.ResponseHeadersRead);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    throw new HttpRequestException(
+                        $"EMIS getAllData/{regionId} returned {(int)response.StatusCode} {response.StatusCode}. Body: {Truncate(body, 500)}");
+                }
+
+                // Parse straight off the response stream — a region is several MB and the
+                // largest ones far more, so it is never materialised as a string first.
+                JObject json;
+                using (var stream = await response.Content.ReadAsStreamAsync())
+                using (var streamReader = new StreamReader(stream))
+                using (var jsonReader = new JsonTextReader(streamReader))
+                {
+                    json = await JObject.LoadAsync(jsonReader);
+                }
+
+                _logger?.LogInformation(
+                    $"[Region {regionId}] Fetched and parsed getAllData in {(DateTime.UtcNow - fetchStarted).TotalSeconds:0.0}s.");
 
                 // === Step 1: Collect all schools, classrooms, and pupils from JSON ===
                 var schoolsToProcess = new List<School>();
                 var classroomsToProcess = new List<Classroom>();
                 var schoolKtakIds = new HashSet<int>();
                 var classroomKeys = new HashSet<string>(); // KtakSchoolId-KtakClassroomId
+
+                // Reference codes EMIS sent that we have no mapping for; logged once per region
+                // so the dictionaries above can be completed instead of silently defaulting.
+                var unmappedDocumentCodes = new HashSet<string>();
+                var unmappedSexCodes = new HashSet<string>();
 
                 // Clear staging table for this region
                 await _context.PupilsStaging.ExecuteDeleteAsync();
@@ -464,10 +547,19 @@ namespace PordznakanAPI.Controllers
                                                             birthday = parsedDate;
                                                         }
 
+                                                        var documentCode = student["ident_document"]?.ToString();
+                                                        var sexCode = student["sex"]?.ToString();
+
+                                                        if (!string.IsNullOrWhiteSpace(documentCode) && !IsKnownDocumentCode(documentCode))
+                                                            unmappedDocumentCodes.Add(documentCode.Trim());
+
+                                                        if (!IsKnownSexCode(sexCode))
+                                                            unmappedSexCodes.Add(string.IsNullOrWhiteSpace(sexCode) ? "(null)" : sexCode.Trim());
+
                                                         var gradeEnum = MapGrade(cl["grade"]?.ToString());
                                                         var subGradeEnum = MapSubGrade(cl["classifier"]?.ToString());
-                                                        var certType = MapCertificateType(student["ident_document"]?.ToString());
-                                                        var gender = MapGender(student["sex"]?.ToString());
+                                                        var certType = MapCertificateType(documentCode);
+                                                        var gender = MapGender(sexCode);
                                                         var statusEnum = MapPupilStatus(student["status"]?.ToString());
 
                                                         var firstName = student["first_name"]?.ToString() ?? "";
@@ -526,6 +618,18 @@ namespace PordznakanAPI.Controllers
                             }
                         }
                     }
+                }
+
+                if (unmappedDocumentCodes.Count > 0)
+                {
+                    _logger?.LogWarning($"[Region {regionId}] Unmapped ident_document codes stored as Other: " +
+                        string.Join(", ", unmappedDocumentCodes.OrderBy(c => c)));
+                }
+
+                if (unmappedSexCodes.Count > 0)
+                {
+                    _logger?.LogWarning($"[Region {regionId}] Unmapped sex codes stored as female: " +
+                        string.Join(", ", unmappedSexCodes.OrderBy(c => c)));
                 }
 
                 // === Step 2: Process Schools ===
@@ -650,7 +754,25 @@ namespace PordznakanAPI.Controllers
                     .Where(p => stagedIds.Contains(p.KtakPupilId) && p.RegionId == regionId)
                     .ToListAsync();
 
-                var existingDict = existingPupils.ToDictionary(p => p.KtakPupilId);
+                // Pupils has no unique constraint on KtakPupilId, so duplicate rows can exist
+                // from before this sync logic was in place. ToDictionary would throw on the
+                // first duplicate and abort the whole region, so keep the most recently
+                // updated row per KtakPupilId and log the rest for cleanup instead.
+                var duplicateGroups = existingPupils
+                    .GroupBy(p => p.KtakPupilId)
+                    .Where(g => g.Count() > 1)
+                    .ToList();
+
+                if (duplicateGroups.Count > 0)
+                {
+                    _logger?.LogWarning(
+                        $"[Region {regionId}] Found {duplicateGroups.Count} KtakPupilId(s) with duplicate rows in Pupils: " +
+                        string.Join(", ", duplicateGroups.Select(g => g.Key)));
+                }
+
+                var existingDict = existingPupils
+                    .GroupBy(p => p.KtakPupilId)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.UpdatedAt).First());
 
                 var newPupils = new List<Pupil>();
                 var pupilsUpdated = 0;
