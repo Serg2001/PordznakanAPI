@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using PordznakanAPI.Data;
 using PordznakanAPI.Models;
+using PordznakanAPI.Services;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -13,13 +14,13 @@ namespace PordznakanAPI.Controllers
     public class SchoolEmployeeController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<SchoolEmployeeController>? _logger;
 
-        private const string SourceBaseUrl = "https://api.emis.am/v1/get_personnel_list";
-
-        public SchoolEmployeeController(AppDbContext context, ILogger<SchoolEmployeeController>? logger = null)
+        public SchoolEmployeeController(AppDbContext context, IHttpClientFactory httpClientFactory, ILogger<SchoolEmployeeController>? logger = null)
         {
             _context = context;
+            _httpClientFactory = httpClientFactory;
             _logger = logger;
         }
 
@@ -141,10 +142,18 @@ namespace PordznakanAPI.Controllers
 
         private async Task<(int added, int updated)> SyncRegionInternal(int regionId)
         {
-            using var client = new HttpClient();
-            var url = $"{SourceBaseUrl}/{regionId}";
-            var responseText = await client.GetStringAsync(url);
+            // data-api.emis.am/v1/get_personnel_list/{regionId} — same host, token and
+            // client as SchoolController's getAllData sync (see Program.cs / appsettings.json).
+            var client = _httpClientFactory.CreateClient(EmisClients.GetAllData);
+            var response = await client.GetAsync($"get_personnel_list/{regionId}");
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException(
+                    $"[SchoolEmployee] get_personnel_list/{regionId} returned {(int)response.StatusCode} {response.StatusCode}. Body: {errorBody}");
+            }
 
+            var responseText = await response.Content.ReadAsStringAsync();
             var token = JToken.Parse(responseText);
 
             JArray? array = token as JArray;

@@ -61,12 +61,14 @@ builder.Services.AddHttpClient("ktakapi", httpClient =>
     };
 });
 
-// Client for data-api.emis.am/v1/getAllData/{regionId} ONLY — the pupil/school/classroom
-// feed used by PupilController. Every other EMIS endpoint in this project deliberately
-// keeps its own HttpClient and its existing host; nothing here affects them.
+// Shared client for data-api.emis.am/v1/ endpoints that need the X-Api-Token header:
+// getAllData/{regionId} (pupil/school/classroom feed, used by SchoolController) and
+// get_personnel_list/{regionId} (school employees, used by SchoolEmployeeController).
+// Every other EMIS endpoint in this project deliberately keeps its own HttpClient and
+// its existing host; nothing here affects them.
 //
-// That endpoint builds each region on demand and is slow: time-to-first-byte for the
-// smallest region is 25-50 seconds, and a busy server answers 500 with a maintenance
+// These endpoints build each region on demand and can be slow: time-to-first-byte for
+// the smallest region is 25-50 seconds, and a busy server answers 500 with a maintenance
 // body instead of waiting. Hence the generous per-attempt budget plus retries.
 builder.Services.AddHttpClient(EmisClients.GetAllData, httpClient =>
 {

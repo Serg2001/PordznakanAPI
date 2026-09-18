@@ -8,8 +8,9 @@ namespace PordznakanAPI.Services
     public static class EmisClients
     {
         /// <summary>
-        /// Client for data-api.emis.am/v1/getAllData/{regionId} only (pupils, schools,
-        /// classrooms). Other EMIS endpoints in this project use their own clients.
+        /// Shared client for data-api.emis.am/v1/ endpoints that need the X-Api-Token header:
+        /// getAllData/{regionId} (pupils, schools, classrooms) and get_personnel_list/{regionId}
+        /// (school employees). Other EMIS endpoints in this project use their own clients.
         /// </summary>
         public const string GetAllData = "emis-getalldata";
     }
