@@ -25,7 +25,9 @@ builder.Services.AddControllers(options =>
 });
 builder.Services.AddOpenApi();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddTransient<BookCheckingSender>();
+
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
 {
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -143,6 +145,19 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 
 // Schedule recurring jobs — all times are Armenia (UTC+4), 5 minutes apart from 00:01
 // UTC fallback = Armenia time minus 4 hours
+// Recurring jobs of the removed Mmuh/Nmuh student and institution controllers; Hangfire keeps them in
+// its storage and would keep firing them against types that no longer exist.
+foreach (var obsoleteJobId in new[]
+{
+    "sync-mmuh-students-daily", "sync-nmuh-students-daily",
+    "sync-mmuh-institutions-daily", "sync-nmuh-institutions-daily",
+    // HasBook is now sent to EMIS the moment it changes, so the nightly send-all is gone.
+    "send-book-checking-daily"
+})
+{
+    RecurringJob.RemoveIfExists(obsoleteJobId);
+}
+
 try
 {
     var timezone = TimeZoneInfo.FindSystemTimeZoneById("Caucasus Standard Time");
@@ -165,8 +180,8 @@ try
         "11 0 * * *",  // 00:11 Armenia
         new RecurringJobOptions { TimeZone = timezone });
 
-    RecurringJob.AddOrUpdate<MmuhStudentController>(
-        "sync-mmuh-students-daily",
+    RecurringJob.AddOrUpdate<MuhStudentController>(
+        "sync-muh-students-daily",
         c => c.SyncAllRegions(),
         "16 0 * * *",  // 00:16 Armenia
         new RecurringJobOptions { TimeZone = timezone });
@@ -175,12 +190,6 @@ try
         "sync-mmuh-staff-daily",
         c => c.SyncAllRegions(),
         "21 0 * * *",  // 00:21 Armenia
-        new RecurringJobOptions { TimeZone = timezone });
-
-    RecurringJob.AddOrUpdate<NmuhStudentController>(
-        "sync-nmuh-students-daily",
-        c => c.SyncAllRegions(),
-        "26 0 * * *",  // 00:26 Armenia
         new RecurringJobOptions { TimeZone = timezone });
 
     RecurringJob.AddOrUpdate<NmuhStaffController>(
@@ -225,16 +234,10 @@ try
         "1 1 * * *",   // 01:01 Armenia
         new RecurringJobOptions { TimeZone = timezone });
 
-    RecurringJob.AddOrUpdate<MmuhInstitutionController>(
-        "sync-mmuh-institutions-daily",
+    RecurringJob.AddOrUpdate<MuhInstitutionController>(
+        "sync-muh-institutions-daily",
         c => c.SyncAllRegions(),
         "6 1 * * *",   // 01:06 Armenia
-        new RecurringJobOptions { TimeZone = timezone });
-
-    RecurringJob.AddOrUpdate<NmuhInstitutionController>(
-        "sync-nmuh-institutions-daily",
-        c => c.SyncAllRegions(),
-        "11 1 * * *",  // 01:11 Armenia
         new RecurringJobOptions { TimeZone = timezone });
 }
 catch (TimeZoneNotFoundException)
@@ -259,8 +262,8 @@ catch (TimeZoneNotFoundException)
         "11 20 * * *", // 20:11 UTC = 00:11 Armenia
         TimeZoneInfo.Utc);
 
-    RecurringJob.AddOrUpdate<MmuhStudentController>(
-        "sync-mmuh-students-daily",
+    RecurringJob.AddOrUpdate<MuhStudentController>(
+        "sync-muh-students-daily",
         c => c.SyncAllRegions(),
         "16 20 * * *", // 20:16 UTC = 00:16 Armenia
         TimeZoneInfo.Utc);
@@ -269,12 +272,6 @@ catch (TimeZoneNotFoundException)
         "sync-mmuh-staff-daily",
         c => c.SyncAllRegions(),
         "21 20 * * *", // 20:21 UTC = 00:21 Armenia
-        TimeZoneInfo.Utc);
-
-    RecurringJob.AddOrUpdate<NmuhStudentController>(
-        "sync-nmuh-students-daily",
-        c => c.SyncAllRegions(),
-        "26 20 * * *", // 20:26 UTC = 00:26 Armenia
         TimeZoneInfo.Utc);
 
     RecurringJob.AddOrUpdate<NmuhStaffController>(
@@ -319,16 +316,10 @@ catch (TimeZoneNotFoundException)
         "1 21 * * *",  // 21:01 UTC = 01:01 Armenia
         TimeZoneInfo.Utc);
 
-    RecurringJob.AddOrUpdate<MmuhInstitutionController>(
-        "sync-mmuh-institutions-daily",
+    RecurringJob.AddOrUpdate<MuhInstitutionController>(
+        "sync-muh-institutions-daily",
         c => c.SyncAllRegions(),
         "6 21 * * *",  // 21:06 UTC = 01:06 Armenia
-        TimeZoneInfo.Utc);
-
-    RecurringJob.AddOrUpdate<NmuhInstitutionController>(
-        "sync-nmuh-institutions-daily",
-        c => c.SyncAllRegions(),
-        "11 21 * * *", // 21:11 UTC = 01:11 Armenia
         TimeZoneInfo.Utc);
 }
 

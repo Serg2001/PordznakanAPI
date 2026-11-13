@@ -22,6 +22,7 @@ namespace PordznakanAPI.DTOs
         public DateOnly Birthday { get; set; }
         public bool Gender { get; set; }
         public EPupilStatus Status { get; set; }
+        public bool HasBook { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

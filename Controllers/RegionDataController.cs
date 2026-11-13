@@ -4,6 +4,7 @@ using PordznakanAPI.Data;
 using PordznakanAPI.DTOs;
 using PordznakanAPI.Enums;
 using PordznakanAPI.Models;
+using PordznakanAPI.Services;
 using System.Net.Http.Json;
 
 namespace PordznakanAPI.Controllers
@@ -15,12 +16,68 @@ namespace PordznakanAPI.Controllers
         private readonly AppDbContext _context;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
+        private readonly BookCheckingSender _bookCheckingSender;
+        private readonly ILogger<RegionDataController>? _logger;
 
-        public RegionDataController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration)
+        // How many save_book_checking requests run at once, and how long each gets before it is
+        // reported as failed, so one HasBook call cannot hang on a slow EMIS.
+        private const int EmisParallelism = 8;
+        // EMIS can answer slowly, so the wait is generous; set EmisApi:HasBookSendTimeoutSeconds to change it.
+        private readonly TimeSpan EmisSendTimeout;
+
+        public RegionDataController(
+            AppDbContext context,
+            IHttpClientFactory httpClientFactory,
+            IConfiguration configuration,
+            BookCheckingSender bookCheckingSender,
+            ILogger<RegionDataController>? logger = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
+            _bookCheckingSender = bookCheckingSender;
+            EmisSendTimeout = TimeSpan.FromSeconds(
+                Math.Max(1, configuration.GetValue<int?>("EmisApi:HasBookSendTimeoutSeconds") ?? 120));
+            _logger = logger;
+        }
+
+        private static string FullName(string lastName, string firstName, string fatherName) =>
+            string.Join(" ", new[] { lastName, firstName, fatherName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+        /// <summary>
+        /// Posts each student's HasBook to EMIS save_book_checking right away, exactly once per
+        /// student. There is no retry: a student EMIS does not accept within EmisSendTimeout is
+        /// reported in FailedToSend, so a slow answer can never turn into a second send.
+        /// </summary>
+        private async Task PushHasBookToEmisAsync(
+            IEnumerable<(int StudentId, string FullName, bool HasBook)> items, HasBookUpdateResultDto result)
+        {
+            using var gate = new SemaphoreSlim(EmisParallelism);
+            var sent = 0;
+            var failed = new System.Collections.Concurrent.ConcurrentBag<int>();
+
+            await Task.WhenAll(items.Select(async item =>
+            {
+                await gate.WaitAsync();
+                try
+                {
+                    using var cts = new CancellationTokenSource(EmisSendTimeout);
+                    await _bookCheckingSender.SendAsync(item.StudentId, item.FullName, item.HasBook, cts.Token);
+                    Interlocked.Increment(ref sent);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, $"save_book_checking not accepted for student {item.StudentId}.");
+                    failed.Add(item.StudentId);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }));
+
+            result.SentToEmis = sent;
+            result.FailedToSend = failed.OrderBy(id => id).ToList();
         }
 
         /// <summary>
@@ -98,6 +155,7 @@ namespace PordznakanAPI.Controllers
                     Birthday = p.Birthday,
                     Gender = p.Gender,
                     Status = p.Status,
+                    HasBook = p.HasBook,
                     CreatedAt = p.CreatedAt,
                     UpdatedAt = p.UpdatedAt
                 })
@@ -139,6 +197,7 @@ namespace PordznakanAPI.Controllers
                     p.Birthday,
                     p.Gender,
                     p.Status,
+                    p.HasBook,
                     p.CreatedAt,
                     p.UpdatedAt
                 })
@@ -419,6 +478,7 @@ namespace PordznakanAPI.Controllers
                     p.LastName,
                     p.Grade,
                     p.SubGrade,
+                    p.HasBook,
                     Place = KtakPlace.School
                 })
                 .FirstOrDefaultAsync();
@@ -427,6 +487,55 @@ namespace PordznakanAPI.Controllers
                 return NotFound(new { message = $"No pupil found for schoolId={schoolId} and socNumber={socNumber}" });
 
             return Ok(pupil);
+        }
+
+        /// <summary>
+        /// Bulk-updates the HasBook flag for Pupils, matched by KtakPupilId ("pupil_id").
+        /// Intended for use by an external system that reports book distribution.
+        /// Pupils has no unique constraint on KtakPupilId, so every row that shares a
+        /// given pupil_id is updated.
+        /// </summary>
+        [HttpPost("pupils/hasbook")]
+        public async Task<IActionResult> UpdatePupilsHasBook([FromBody] List<HasBookUpdateItemDto> updates)
+        {
+            if (updates == null || updates.Count == 0)
+                return BadRequest(new { message = "Request body must contain at least one { pupil_id, hasBook } entry." });
+
+            var ids = updates.Select(u => u.PupilId).Distinct().ToList();
+            var pupils = await _context.Pupils
+                .Where(p => ids.Contains(p.KtakPupilId))
+                .ToListAsync();
+
+            var byPupilId = pupils.ToLookup(p => p.KtakPupilId);
+            var result = new HasBookUpdateResultDto();
+            var toSend = new Dictionary<int, (int StudentId, string FullName, bool HasBook)>();
+
+            foreach (var u in updates)
+            {
+                var matches = byPupilId[u.PupilId];
+                if (!matches.Any())
+                {
+                    result.NotFound.Add(u.PupilId);
+                    continue;
+                }
+
+                foreach (var pupil in matches)
+                {
+                    pupil.HasBook = u.HasBook;
+                    pupil.UpdatedAt = DateTime.UtcNow;
+                    result.Updated++;
+                }
+
+                var first = matches.First();
+                toSend[u.PupilId] = (u.PupilId, FullName(first.LastName, first.FirstName, first.FatherName), u.HasBook);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Only after the change is saved, send it to EMIS straight away.
+            await PushHasBookToEmisAsync(toSend.Values, result);
+
+            return Ok(result);
         }
 
         // ── Classroom endpoints ──────────────────────────────────────────────
@@ -458,27 +567,29 @@ namespace PordznakanAPI.Controllers
             return Ok(classrooms);
         }
 
-        // ── MmuhInstitution endpoints ────────────────────────────────────────
+        // ── MuhInstitution endpoints ─────────────────────────────────────────
 
         /// <summary>
-        /// Returns all MMUH institutions for the given region.
+        /// Returns all MUH institutions (MMUH and NMUH) for the given region.
         /// </summary>
-        [HttpGet("mmuh-institutions/by-region/{regionId}")]
-        public async Task<IActionResult> GetMmuhInstitutionsByRegion([FromRoute] int regionId)
+        [HttpGet("muh-institutions/by-region/{regionId}")]
+        public async Task<IActionResult> GetMuhInstitutionsByRegion([FromRoute] int regionId)
         {
-            var institutions = await _context.MmuhInstitutions
+            var institutions = await _context.MuhInstitutions
                 .Where(i => i.RegionId == regionId)
                 .Select(i => new
                 {
                     i.Id,
-                    i.InstId,
+                    i.InstitutionId,
                     i.RegionId,
                     i.Name,
-                    i.LegalMarzId,
-                    i.LegalAddress,
-                    i.BusinessMarzId,
-                    i.BusinessAddress,
                     i.Email,
+                    i.InstitutionType,
+                    i.InstitutionTypeName,
+                    i.Marz,
+                    i.Region,
+                    i.Community,
+                    i.Address,
                     i.CreatedAt,
                     i.UpdatedAt
                 })
@@ -488,114 +599,117 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
-        /// Returns a summary (DshhSchoolId, KtakSchoolId, Name) of all MMUH institutions for the given region.
+        /// Returns a summary (DshhSchoolId, KtakSchoolId, Name) of all MUH institutions for the given region.
         /// </summary>
-        [HttpGet("mmuh-institutions/summary/by-region/{regionId}")]
-        public async Task<IActionResult> GetMmuhInstitutionsSummaryByRegion([FromRoute] int regionId)
+        [HttpGet("muh-institutions/summary/by-region/{regionId}")]
+        public async Task<IActionResult> GetMuhInstitutionsSummaryByRegion([FromRoute] int regionId)
         {
-            var institutions = await _context.MmuhInstitutions
+            var institutions = await _context.MuhInstitutions
                 .Where(i => i.RegionId == regionId)
-                .Select(i => new MmuhInstitutionSummaryDto
+                .Select(i => new MuhInstitutionSummaryDto
                 {
                     DshhSchoolId = i.Id,
-                    KtakSchoolId = i.InstId,
+                    KtakSchoolId = i.InstitutionId,
                     Name = i.Name,
                     Email = i.Email,
-                    Place = KtakPlace.Mmuh
+                    InstitutionType = i.InstitutionType,
+                    InstitutionTypeName = i.InstitutionTypeName
                 })
                 .ToListAsync();
 
             return Ok(institutions);
         }
 
-        // ── MmuhStudent endpoints ────────────────────────────────────────────
+        // ── MuhStudent endpoints ─────────────────────────────────────────────
 
         /// <summary>
-        /// Returns all MMUH students for the given region.
+        /// Returns all MUH students (MMUH and NMUH) for the given region.
         /// </summary>
-        [HttpGet("mmuh-students/by-region/{regionId}")]
-        public async Task<IActionResult> GetMmuhStudentsByRegion([FromRoute] int regionId)
+        [HttpGet("muh-students/by-region/{regionId}")]
+        public async Task<IActionResult> GetMuhStudentsByRegion([FromRoute] int regionId)
         {
-            var students = await _context.MmuhStudents
+            var students = await _context.MuhStudents
                 .Where(s => s.RegionId == regionId)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.MmuhStudentId,
-                    s.MmuhSchoolId,
-                    s.RegionId,
-                    s.SchoolName,
-                    s.Marz,
-                    s.FirstName,
-                    s.LastName,
-                    s.FatherName,
-                    s.DateOfBirth,
-                    s.SocNumber,
-                    s.Sex,
-                    s.Graduated,
-                    s.GroupId,
-                    s.ClassroomGrade,
-                    s.CreatedAt,
-                    s.UpdatedAt
-                })
-                .ToListAsync();
-
-            return Ok(students);
-        }
-
-        /// <summary>
-        /// Returns all MMUH students that belong to the given institution (by InstId).
-        /// </summary>
-        [HttpGet("mmuh-students/by-institution/{institutionId}")]
-        public async Task<IActionResult> GetMmuhStudentsByInstitution([FromRoute] int institutionId)
-        {
-            var students = await _context.MmuhStudents
-                .Where(s => s.MmuhSchoolId == institutionId)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.MmuhStudentId,
-                    s.MmuhSchoolId,
-                    s.InternalSchoolId,
-                    s.RegionId,
-                    s.SchoolName,
-                    s.Marz,
-                    s.FirstName,
-                    s.LastName,
-                    s.FatherName,
-                    s.DateOfBirth,
-                    s.SocNumber,
-                    s.Sex,
-                    s.Graduated,
-                    s.GroupId,
-                    s.ClassroomGrade,
-                    s.CreatedAt,
-                    s.UpdatedAt
-                })
-                .ToListAsync();
-
-            return Ok(students);
-        }
-
-        /// <summary>
-        /// Returns a summary (Id, KtakPupilId, KtakSchoolId, FirstName, LastName, SocNumber, Grade)
-        /// of all MMUH students that belong to the given institution (by InstId).
-        /// </summary>
-        [HttpGet("mmuh-students/summary/by-institution/{institutionId}")]
-        public async Task<IActionResult> GetMmuhStudentsSummaryByInstitution([FromRoute] int institutionId)
-        {
-            var students = await _context.MmuhStudents
-                .Where(s => s.MmuhSchoolId == institutionId)
-                .Select(s => new MmuhStudentSummaryDto
+                .Select(s => new MuhStudentResponseDto
                 {
                     Id = s.Id,
-                    KtakPupilId = s.MmuhStudentId,
-                    KtakSchoolId = s.MmuhSchoolId,
+                    MuhStudentId = s.MuhStudentId,
+                    MuhSchoolId = s.InstitutionId,
+                    RegionId = s.RegionId,
+                    SchoolName = s.InstitutionName,
+                    Marz = s.Marz,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    FatherName = s.FatherName,
+                    DateOfBirth = s.DateOfBirth,
+                    SocNumber = s.SocNumber,
+                    Sex = s.Sex,
+                    Graduated = null,
+                    EduYear = s.EduYear,
+                    GroupId = s.GroupId.ToString(),
+                    ClassroomGrade = null,
+                    CreatedAt = s.CreatedAt,
+                    UpdatedAt = s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        /// <summary>
+        /// Returns all MUH students that belong to the given institution (by institution_id).
+        /// </summary>
+        [HttpGet("muh-students/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMuhStudentsByInstitution([FromRoute] int institutionId)
+        {
+            var students = await _context.MuhStudents
+                .Where(s => s.InstitutionId == institutionId)
+                .Select(s => new MuhStudentResponseDto
+                {
+                    Id = s.Id,
+                    MuhStudentId = s.MuhStudentId,
+                    MuhSchoolId = s.InstitutionId,
+                    RegionId = s.RegionId,
+                    SchoolName = s.InstitutionName,
+                    Marz = s.Marz,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    FatherName = s.FatherName,
+                    DateOfBirth = s.DateOfBirth,
+                    SocNumber = s.SocNumber,
+                    Sex = s.Sex,
+                    Graduated = null,
+                    EduYear = s.EduYear,
+                    GroupId = s.GroupId.ToString(),
+                    ClassroomGrade = null,
+                    CreatedAt = s.CreatedAt,
+                    UpdatedAt = s.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
+        /// <summary>
+        /// Returns a summary (Id, KtakPupilId, KtakSchoolId, FirstName, LastName, SocNumber, group)
+        /// of all MUH students that belong to the given institution (by institution_id).
+        /// </summary>
+        [HttpGet("muh-students/summary/by-institution/{institutionId}")]
+        public async Task<IActionResult> GetMuhStudentsSummaryByInstitution([FromRoute] int institutionId)
+        {
+            var students = await _context.MuhStudents
+                .Where(s => s.InstitutionId == institutionId)
+                .Select(s => new MuhStudentSummaryDto
+                {
+                    Id = s.Id,
+                    KtakPupilId = s.MuhStudentId,
+                    KtakSchoolId = s.InstitutionId,
                     FirstName = s.FirstName,
                     LastName = s.LastName,
                     SocNumber = s.SocNumber,
-                    Grade = s.ClassroomGrade,
-                    Place = KtakPlace.Mmuh
+                    GroupId = s.GroupId,
+                    GroupName = s.GroupName,
+                    HasBook = s.HasBook
                 })
                 .ToListAsync();
 
@@ -603,32 +717,84 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
-        /// Returns FirstName, LastName, Grade and KtakSchoolId for an MMUH student
-        /// identified by MmuhSchoolId and SocNumber.
+        /// Returns FirstName, LastName, group and KtakSchoolId for a MUH student
+        /// identified by institution_id and SocNumber.
         /// </summary>
-        [HttpGet("mmuh-students/by-institution/{institutionId}/{socNumber}")]
-        public async Task<IActionResult> GetMmuhStudentByInstitutionAndSoc(
+        [HttpGet("muh-students/by-institution/{institutionId}/{socNumber}")]
+        public async Task<IActionResult> GetMuhStudentByInstitutionAndSoc(
             [FromRoute] int institutionId,
             [FromRoute] string socNumber)
         {
-            var student = await _context.MmuhStudents
-                .Where(s => s.MmuhSchoolId == institutionId && s.SocNumber == socNumber)
+            var student = await _context.MuhStudents
+                .Where(s => s.InstitutionId == institutionId && s.SocNumber == socNumber)
                 .Select(s => new
                 {
                     Id = s.Id,
-                    KtakPupilId = s.MmuhStudentId,
-                    KtakSchoolId = s.MmuhSchoolId,
+                    KtakPupilId = s.MuhStudentId,
+                    KtakSchoolId = s.InstitutionId,
                     FirstName = s.FirstName,
                     LastName = s.LastName,
-                    Grade = s.ClassroomGrade,
-                    Place = KtakPlace.Mmuh
+                    GroupId = s.GroupId,
+                    GroupName = s.GroupName,
+                    s.HasBook
                 })
                 .FirstOrDefaultAsync();
 
             if (student == null)
-                return NotFound(new { message = $"No MMUH student found for institutionId={institutionId} and socNumber={socNumber}" });
+                return NotFound(new { message = $"No MUH student found for institutionId={institutionId} and socNumber={socNumber}" });
 
             return Ok(student);
+        }
+
+        /// <summary>
+        /// Bulk-updates the HasBook flag for MUH students, matched by MuhStudentId ("pupil_id").
+        /// Intended for use by an external system that reports book distribution.
+        /// The old mmuh-students/hasbook and nmuh-students/hasbook routes are kept as aliases
+        /// so the external caller keeps working.
+        /// </summary>
+        [HttpPost("muh-students/hasbook")]
+        [HttpPost("mmuh-students/hasbook")]
+        [HttpPost("nmuh-students/hasbook")]
+        public async Task<IActionResult> UpdateMuhStudentsHasBook([FromBody] List<HasBookUpdateItemDto> updates)
+        {
+            if (updates == null || updates.Count == 0)
+                return BadRequest(new { message = "Request body must contain at least one { pupil_id, hasBook } entry." });
+
+            var ids = updates.Select(u => u.PupilId).Distinct().ToList();
+            var students = await _context.MuhStudents
+                .Where(s => ids.Contains(s.MuhStudentId))
+                .ToListAsync();
+
+            var byStudentId = students.ToLookup(s => s.MuhStudentId);
+            var result = new HasBookUpdateResultDto();
+            var toSend = new Dictionary<int, (int StudentId, string FullName, bool HasBook)>();
+
+            foreach (var u in updates)
+            {
+                var matches = byStudentId[u.PupilId];
+                if (!matches.Any())
+                {
+                    result.NotFound.Add(u.PupilId);
+                    continue;
+                }
+
+                foreach (var student in matches)
+                {
+                    student.HasBook = u.HasBook;
+                    student.UpdatedAt = DateTime.UtcNow;
+                    result.Updated++;
+                }
+
+                var first = matches.First();
+                toSend[u.PupilId] = (u.PupilId, FullName(first.LastName, first.FirstName, first.FatherName), u.HasBook);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Only after the change is saved, send it to EMIS straight away.
+            await PushHasBookToEmisAsync(toSend.Values, result);
+
+            return Ok(result);
         }
 
         // ── MmuhStaff endpoints ──────────────────────────────────────────────
@@ -852,181 +1018,6 @@ namespace PordznakanAPI.Controllers
             };
 
             return Ok(teacher);
-        }
-
-        // ── NmuhInstitution endpoints ────────────────────────────────────────
-
-        /// <summary>
-        /// Returns all NMUH institutions for the given region.
-        /// </summary>
-        [HttpGet("nmuh-institutions/by-region/{regionId}")]
-        public async Task<IActionResult> GetNmuhInstitutionsByRegion([FromRoute] int regionId)
-        {
-            var institutions = await _context.NmuhInstitutions
-                .Where(i => i.RegionId == regionId)
-                .Select(i => new
-                {
-                    i.Id,
-                    i.InstId,
-                    i.RegionId,
-                    i.Name,
-                    i.LegalMarzId,
-                    i.LegalAddress,
-                    i.BusinessMarzId,
-                    i.BusinessAddress,
-                    i.Email,
-                    i.CreatedAt,
-                    i.UpdatedAt
-                })
-                .ToListAsync();
-
-            return Ok(institutions);
-        }
-
-        /// <summary>
-        /// Returns a summary (DshhSchoolId, KtakSchoolId, Name) of all NMUH institutions for the given region.
-        /// </summary>
-        [HttpGet("nmuh-institutions/summary/by-region/{regionId}")]
-        public async Task<IActionResult> GetNmuhInstitutionsSummaryByRegion([FromRoute] int regionId)
-        {
-            var institutions = await _context.NmuhInstitutions
-                .Where(i => i.RegionId == regionId)
-                .Select(i => new NmuhInstitutionSummaryDto
-                {
-                    DshhSchoolId = i.Id,
-                    KtakSchoolId = i.InstId,
-                    Name = i.Name,
-                    Email = i.Email,
-                    Place = KtakPlace.Nmuh
-                })
-                .ToListAsync();
-
-            return Ok(institutions);
-        }
-
-        // ── NmuhStudent endpoints ────────────────────────────────────────────
-
-        /// <summary>
-        /// Returns all NMUH students for the given region.
-        /// </summary>
-        [HttpGet("nmuh-students/by-region/{regionId}")]
-        public async Task<IActionResult> GetNmuhStudentsByRegion([FromRoute] int regionId)
-        {
-            var students = await _context.NmuhStudents
-                .Where(s => s.RegionId == regionId)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.NmuhStudentId,
-                    s.NmuhSchoolId,
-                    s.RegionId,
-                    s.SchoolName,
-                    s.Marz,
-                    s.FirstName,
-                    s.LastName,
-                    s.FatherName,
-                    s.DateOfBirth,
-                    s.SocNumber,
-                    s.Sex,
-                    s.Graduated,
-                    s.EduYear,
-                    s.GroupId,
-                    s.ClassroomGrade,
-                    s.CreatedAt,
-                    s.UpdatedAt
-                })
-                .ToListAsync();
-
-            return Ok(students);
-        }
-
-        /// <summary>
-        /// Returns all NMUH students that belong to the given institution (by InstId).
-        /// </summary>
-        [HttpGet("nmuh-students/by-institution/{institutionId}")]
-        public async Task<IActionResult> GetNmuhStudentsByInstitution([FromRoute] int institutionId)
-        {
-            var students = await _context.NmuhStudents
-                .Where(s => s.NmuhSchoolId == institutionId)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.NmuhStudentId,
-                    s.NmuhSchoolId,
-                    s.InternalSchoolId,
-                    s.RegionId,
-                    s.SchoolName,
-                    s.Marz,
-                    s.FirstName,
-                    s.LastName,
-                    s.FatherName,
-                    s.DateOfBirth,
-                    s.SocNumber,
-                    s.Sex,
-                    s.Graduated,
-                    s.EduYear,
-                    s.GroupId,
-                    s.ClassroomGrade,
-                    s.CreatedAt,
-                    s.UpdatedAt
-                })
-                .ToListAsync();
-
-            return Ok(students);
-        }
-
-        /// <summary>
-        /// Returns a summary (Id, KtakPupilId, KtakSchoolId, FirstName, LastName, SocNumber, Grade)
-        /// of all NMUH students that belong to the given institution (by InstId).
-        /// </summary>
-        [HttpGet("nmuh-students/summary/by-institution/{institutionId}")]
-        public async Task<IActionResult> GetNmuhStudentsSummaryByInstitution([FromRoute] int institutionId)
-        {
-            var students = await _context.NmuhStudents
-                .Where(s => s.NmuhSchoolId == institutionId)
-                .Select(s => new NmuhStudentSummaryDto
-                {
-                    Id = s.Id,
-                    KtakPupilId = s.NmuhStudentId,
-                    KtakSchoolId = s.NmuhSchoolId,
-                    FirstName = s.FirstName,
-                    LastName = s.LastName,
-                    SocNumber = s.SocNumber,
-                    Grade = s.ClassroomGrade,
-                    Place = KtakPlace.Nmuh
-                })
-                .ToListAsync();
-
-            return Ok(students);
-        }
-
-        /// <summary>
-        /// Returns FirstName, LastName, Grade and KtakSchoolId for an NMUH student
-        /// identified by NmuhSchoolId and SocNumber.
-        /// </summary>
-        [HttpGet("nmuh-students/by-institution/{institutionId}/{socNumber}")]
-        public async Task<IActionResult> GetNmuhStudentByInstitutionAndSoc(
-            [FromRoute] int institutionId,
-            [FromRoute] string socNumber)
-        {
-            var student = await _context.NmuhStudents
-                .Where(s => s.NmuhSchoolId == institutionId && s.SocNumber == socNumber)
-                .Select(s => new
-                {
-                    Id = s.Id,
-                    KtakPupilId = s.NmuhStudentId,
-                    KtakSchoolId = s.NmuhSchoolId,
-                    FirstName = s.FirstName,
-                    LastName = s.LastName,
-                    Grade = s.ClassroomGrade,
-                    Place = KtakPlace.Nmuh
-                })
-                .FirstOrDefaultAsync();
-
-            if (student == null)
-                return NotFound(new { message = $"No NMUH student found for institutionId={institutionId} and socNumber={socNumber}" });
-
-            return Ok(student);
         }
 
         // ── NmuhStaff endpoints ──────────────────────────────────────────────
@@ -1258,7 +1249,7 @@ namespace PordznakanAPI.Controllers
         {
             var directors = await _context.SchoolEmployees
                 .Where(e => e.RegionId == regionId &&
-                            (e.Position == "Տնօրեն" || e.Position == "Վարչատնտեսական համակարգող"))
+                            (e.Position == "Տնօրեն" || e.Position == "Վարչատնտեսական մասի համակարգող"))
                 .Select(e => new
                 {
                     e.Id,
@@ -1404,6 +1395,7 @@ namespace PordznakanAPI.Controllers
                     Birthday            = p.Birthday,
                     Gender              = p.Gender,
                     Status              = p.Status,
+                    HasBook             = p.HasBook,
                     CreatedAt           = p.CreatedAt,
                     UpdatedAt           = p.UpdatedAt
                 })
@@ -1471,37 +1463,38 @@ namespace PordznakanAPI.Controllers
         }
 
         /// <summary>
-        /// Returns a single MMUH student by its Id.
+        /// Returns a single MUH student by its Id.
         /// </summary>
-        [HttpGet("mmuh-students/{id:guid}")]
-        public async Task<IActionResult> GetMmuhStudentById([FromRoute] Guid id)
+        [HttpGet("muh-students/{id:guid}")]
+        public async Task<IActionResult> GetMuhStudentById([FromRoute] Guid id)
         {
-            var student = await _context.MmuhStudents
+            var student = await _context.MuhStudents
                 .Where(s => s.Id == id)
-                .Select(s => new
+                .Select(s => new MuhStudentResponseDto
                 {
-                    s.Id,
-                    s.MmuhStudentId,
-                    s.MmuhSchoolId,
-                    s.RegionId,
-                    s.SchoolName,
-                    s.Marz,
-                    s.FirstName,
-                    s.LastName,
-                    s.FatherName,
-                    s.DateOfBirth,
-                    s.SocNumber,
-                    s.Sex,
-                    s.Graduated,
-                    s.GroupId,
-                    s.ClassroomGrade,
-                    s.CreatedAt,
-                    s.UpdatedAt
+                    Id = s.Id,
+                    MuhStudentId = s.MuhStudentId,
+                    MuhSchoolId = s.InstitutionId,
+                    RegionId = s.RegionId,
+                    SchoolName = s.InstitutionName,
+                    Marz = s.Marz,
+                    FirstName = s.FirstName,
+                    LastName = s.LastName,
+                    FatherName = s.FatherName,
+                    DateOfBirth = s.DateOfBirth,
+                    SocNumber = s.SocNumber,
+                    Sex = s.Sex,
+                    Graduated = null,
+                    EduYear = s.EduYear,
+                    GroupId = s.GroupId.ToString(),
+                    ClassroomGrade = null,
+                    CreatedAt = s.CreatedAt,
+                    UpdatedAt = s.UpdatedAt
                 })
                 .FirstOrDefaultAsync();
 
             if (student == null)
-                return NotFound(new { message = $"MmuhStudent {id} not found." });
+                return NotFound(new { message = $"MuhStudent {id} not found." });
 
             return Ok(student);
         }
@@ -1568,43 +1561,6 @@ namespace PordznakanAPI.Controllers
                 return NotFound(new { message = $"MmuhStaff {id} not found." });
 
             return Ok(staff);
-        }
-
-        /// <summary>
-        /// Returns a single NMUH student by its Id.
-        /// </summary>
-        [HttpGet("nmuh-students/{id:guid}")]
-        public async Task<IActionResult> GetNmuhStudentById([FromRoute] Guid id)
-        {
-            var student = await _context.NmuhStudents
-                .Where(s => s.Id == id)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.NmuhStudentId,
-                    s.NmuhSchoolId,
-                    s.RegionId,
-                    s.SchoolName,
-                    s.Marz,
-                    s.FirstName,
-                    s.LastName,
-                    s.FatherName,
-                    s.DateOfBirth,
-                    s.SocNumber,
-                    s.Sex,
-                    s.Graduated,
-                    s.EduYear,
-                    s.GroupId,
-                    s.ClassroomGrade,
-                    s.CreatedAt,
-                    s.UpdatedAt
-                })
-                .FirstOrDefaultAsync();
-
-            if (student == null)
-                return NotFound(new { message = $"NmuhStudent {id} not found." });
-
-            return Ok(student);
         }
 
         /// <summary>

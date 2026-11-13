@@ -4,3 +4,9 @@ GET {{PordznakanAPI_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+###
+
+# Send has_book for ALL pupils to EMIS save_book_checking (one request per student)
+POST {{PordznakanAPI_HostAddress}}/api/BookChecking/send
+X-API-KEY: <your Integration:IncomingApiKey value>

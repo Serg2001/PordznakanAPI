@@ -8,6 +8,7 @@ using PordznakanAPI.Models;
 using PordznakanAPI.Enums;
 using PordznakanAPI.Services;
 using System.IO;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -28,7 +29,8 @@ namespace PordznakanAPI.Controllers
         public int PupilsProcessed { get; set; }
         public int PupilsAdded { get; set; }
         public int PupilsUpdated { get; set; }
-        
+        public int PupilsDeleted { get; set; }
+
         // Lists of changed entities using DTOs
         public List<SchoolDto> SchoolsUpdatedList { get; set; } = new();
         public List<ClassroomDto> ClassroomsUpdatedList { get; set; } = new();
@@ -49,12 +51,24 @@ namespace PordznakanAPI.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
         private readonly ILogger<PupilController>? _logger;
 
-        public PupilController(AppDbContext context, IHttpClientFactory httpClientFactory, ILogger<PupilController>? logger = null)
+        // A sync that would delete more than this share of a region's pupils is treated as a
+        // broken EMIS answer (partial or truncated data), not as real removals, and deletes nothing.
+        private const double MaxPupilDeleteShare = 0.2;
+
+        // Same idea for inserts: more than this share of a region's existing pupils appearing as
+        // "new" in one sync (and at least MinNewPupilsForInsertGuard of them) is treated as a
+        // failed existence check, not a real intake, and inserts nothing.
+        private const double MaxPupilInsertShare = 0.2;
+        private const int MinNewPupilsForInsertGuard = 500;
+
+        public PupilController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<PupilController>? logger = null)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
             _logger = logger;
         }
 
@@ -116,6 +130,7 @@ namespace PordznakanAPI.Controllers
                 Birthday = pupil.Birthday,
                 Gender = pupil.Gender,
                 Status = pupil.Status,
+                HasBook = pupil.HasBook,
                 CreatedAt = pupil.CreatedAt,
                 UpdatedAt = pupil.UpdatedAt
             };
@@ -272,6 +287,61 @@ namespace PordznakanAPI.Controllers
             return v is "3" or "4" or "48" or "47" or "1" or "2";
         }
 
+        // Schools known to come back missing/incomplete from the region-wide
+        // getAllData/{regionId} response and that EMIS instead serves individually via
+        // getAllData/{regionId}/{schoolId}. Fetched separately per region and merged in.
+        private static readonly (int RegionId, int SchoolId)[] SpecialCaseSchools =
+        {
+            (2, 364),
+            (3, 469),
+            (3, 486),
+            (3,504),
+            (3, 507),
+            (3, 514),
+            (3, 517),
+            (3, 518),
+            (3, 1315),
+            (3, 1316),
+            (3, 1317),
+            (3, 1318),
+            (3, 1319),
+            (3, 1320),
+            (6, 724),
+            (10, 1114),
+            (10, 1117),
+            (10, 1118),
+            (10, 1121),
+            (10, 1122),
+            (10, 1123),
+            (10, 1125),
+            (10, 1126),
+            (10, 1127),
+            (10, 1128),
+            (10, 1132),
+            (10, 1133),
+            (10, 1135),
+            (10, 1136),
+            (11, 1164),
+            (11, 1165),
+            (11, 1168),
+            (11, 1173),
+            (11, 1174),
+            (11, 1177),
+            (11, 1179),
+            (11, 1182),
+            (11, 1195),
+            (11, 1199),
+            (11, 1212),
+            (11, 1213),
+            (11, 1214),
+            (11, 1216),
+            (11, 1217),
+            (11, 1218),
+            (11, 1219),
+            (11, 1220),
+            (11, 1223)
+        };
+
         private static EPupilStatus MapPupilStatus(string? status)
         {
             // data-api.emis.am returns only currently enrolled pupils and leaves status
@@ -318,7 +388,7 @@ namespace PordznakanAPI.Controllers
                         _logger?.LogInformation($"Region {regionId} synced successfully. " +
                             $"Schools: {result.SchoolsAdded} added, {result.SchoolsUpdated} updated. " +
                             $"Classrooms: {result.ClassroomsAdded} added, {result.ClassroomsUpdated} updated. " +
-                            $"Pupils: {result.PupilsAdded} added, {result.PupilsUpdated} updated.");
+                            $"Pupils: {result.PupilsAdded} added, {result.PupilsUpdated} updated, {result.PupilsDeleted} deleted.");
                     }
                     else
                     {
@@ -368,7 +438,43 @@ namespace PordznakanAPI.Controllers
                 $"Success: {successCount}/{regionIds.Length}. " +
                 $"Total - Schools: {summary.TotalSchoolsAdded} added, {summary.TotalSchoolsUpdated} updated. " +
                 $"Classrooms: {summary.TotalClassroomsAdded} added, {summary.TotalClassroomsUpdated} updated. " +
-                $"Pupils: {summary.TotalPupilsAdded} added, {summary.TotalPupilsUpdated} updated.");
+                $"Pupils: {summary.TotalPupilsAdded} added, {summary.TotalPupilsUpdated} updated, {results.Sum(r => r.PupilsDeleted)} deleted.");
+
+            await NotifyCrmSyncCompleted(summary);
+        }
+
+        /// <summary>
+        /// Tells the CRM the nightly pupils sync has finished. Best-effort: a failure here
+        /// must not fail the Hangfire job, so it's logged and swallowed.
+        /// </summary>
+        private async Task NotifyCrmSyncCompleted(SyncChangesSummaryDto summary)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient("ktakapi");
+
+                var outgoingKey = _configuration["Integration:OutgoingApiKey"];
+                client.DefaultRequestHeaders.Remove("X-API-KEY");
+                client.DefaultRequestHeaders.Add("X-API-KEY", outgoingKey);
+
+                var response = await client.PostAsJsonAsync("sync-pupils", new
+                {
+                    status = "completed",
+                    completedAt = summary.SyncCompletedAt,
+                    successfulRegions = summary.SuccessfulRegions,
+                    failedRegions = summary.TotalRegionsProcessed - summary.SuccessfulRegions
+                });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    _logger?.LogError($"CRM sync-pupils notification returned {(int)response.StatusCode}: {body}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to notify CRM that the pupils sync completed");
+            }
         }
 
         /// <summary>
@@ -390,26 +496,65 @@ namespace PordznakanAPI.Controllers
                 var client = _httpClientFactory.CreateClient(EmisClients.GetAllData);
                 var fetchStarted = DateTime.UtcNow;
 
-                using var response = await client.GetAsync($"getAllData/{regionId}", HttpCompletionOption.ResponseHeadersRead);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var body = await response.Content.ReadAsStringAsync();
-                    throw new HttpRequestException(
-                        $"EMIS getAllData/{regionId} returned {(int)response.StatusCode} {response.StatusCode}. Body: {Truncate(body, 500)}");
-                }
-
-                // Parse straight off the response stream — a region is several MB and the
-                // largest ones far more, so it is never materialised as a string first.
-                JObject json;
-                using (var stream = await response.Content.ReadAsStreamAsync())
-                using (var streamReader = new StreamReader(stream))
-                using (var jsonReader = new JsonTextReader(streamReader))
-                {
-                    json = await JObject.LoadAsync(jsonReader);
-                }
+                // EMIS paginates getAllData/{regionId}?page=N (page / per_page / total / last_page).
+                // Read every page and merge the schools into one object; a page that fails after the
+                // retries throws, so a region is never synced from only part of its schools.
+                var regionPages = await EmisPaging.FetchAllPagesAsync(
+                    client, $"getAllData/{regionId}", _logger, $"[Region {regionId}]");
+                var json = regionPages.Data;
 
                 _logger?.LogInformation(
-                    $"[Region {regionId}] Fetched and parsed getAllData in {(DateTime.UtcNow - fetchStarted).TotalSeconds:0.0}s.");
+                    $"[Region {regionId}] Fetched getAllData: {regionPages.PagesFetched} page(s), " +
+                    $"{json.Count} school(s)" +
+                    (regionPages.Total is null ? "" : $" of {regionPages.Total}") +
+                    $" in {(DateTime.UtcNow - fetchStarted).TotalSeconds:0.0}s.");
+
+                if (!regionPages.Complete)
+                {
+                    _logger?.LogWarning(
+                        $"[Region {regionId}] Received {json.Count} schools but EMIS reports total={regionPages.Total}. " +
+                        "Treating the region as incomplete: pupils missing from it will NOT be deleted.");
+                }
+
+                // Merge in special-case schools for this region — each fetched individually
+                // by schools_id (same response shape, just one school) and merged into the
+                // region JSON so Step 1 below picks them up like any other school.
+                // Set when a special-case school could not be fetched: its pupils are then missing
+                // from this sync, so they must not be mistaken for pupils EMIS removed.
+                var regionDataIncomplete = !regionPages.Complete;
+
+                foreach (var special in SpecialCaseSchools.Where(s => s.RegionId == regionId))
+                {
+                    JObject specialJson;
+                    try
+                    {
+                        // Same reader: copes with a single-page answer and with a paginated one.
+                        var specialPages = await EmisPaging.FetchAllPagesAsync(
+                            client,
+                            $"getAllData/{special.RegionId}/{special.SchoolId}",
+                            _logger,
+                            $"[Region {regionId}] [School {special.SchoolId}]");
+                        specialJson = specialPages.Data;
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        _logger?.LogWarning(
+                            $"[Region {regionId}] Special-case school {special.SchoolId} fetch failed: {ex.Message}");
+                        regionDataIncomplete = true;
+                        continue;
+                    }
+
+                    // Top-level keys are school keys. Replace each key outright: JObject.Merge would
+                    // recurse into a school already present in the region response and CONCATENATE
+                    // its students arrays, so every pupil of that school was stored twice.
+                    foreach (var specialProp in specialJson.Properties())
+                    {
+                        json[specialProp.Name] = specialProp.Value.DeepClone();
+                    }
+
+                    _logger?.LogInformation(
+                        $"[Region {regionId}] Merged special-case school {special.SchoolId} into region data.");
+                }
 
                 // === Step 1: Collect all schools, classrooms, and pupils from JSON ===
                 var schoolsToProcess = new List<School>();
@@ -422,8 +567,8 @@ namespace PordznakanAPI.Controllers
                 var unmappedDocumentCodes = new HashSet<string>();
                 var unmappedSexCodes = new HashSet<string>();
 
-                // Clear staging table for this region
-                await _context.PupilsStaging.ExecuteDeleteAsync();
+                // Clear staging rows for this region only (PupilsStaging is shared by all regions)
+                await _context.PupilsStaging.Where(s => s.RegionId == regionId).ExecuteDeleteAsync();
 
                 foreach (JProperty schoolProp in json.Properties())
                 {
@@ -733,7 +878,29 @@ namespace PordznakanAPI.Controllers
                 await _context.SaveChangesAsync();
 
                 // Load all staged pupils for this sync
-                var stagingRows = await _context.PupilsStaging.ToListAsync();
+                var stagingRows = await _context.PupilsStaging
+                    .Where(s => s.RegionId == regionId)
+                    .ToListAsync();
+
+                // The same KtakPupilId must never produce two Pupils rows. If EMIS (or a merge)
+                // delivered a pupil twice, keep one staging row per KtakPupilId.
+                var duplicateStaging = stagingRows
+                    .GroupBy(s => s.KtakPupilId)
+                    .Where(g => g.Count() > 1)
+                    .ToList();
+
+                if (duplicateStaging.Count > 0)
+                {
+                    _logger?.LogWarning(
+                        $"[Region {regionId}] {duplicateStaging.Count} KtakPupilId(s) appear more than once in the EMIS data; keeping one row each.");
+
+                    var surplus = duplicateStaging
+                        .SelectMany(g => g.OrderByDescending(x => x.UpdatedAt).Skip(1))
+                        .ToList();
+                    _context.PupilsStaging.RemoveRange(surplus);
+                    var surplusIds = surplus.Select(x => x.Id).ToHashSet();
+                    stagingRows = stagingRows.Where(s => !surplusIds.Contains(s.Id)).ToList();
+                }
 
                 // Update ClassroomInternalId in staging using classroom mapping
                 foreach (var s in stagingRows)
@@ -747,11 +914,13 @@ namespace PordznakanAPI.Controllers
 
                 await _context.SaveChangesAsync();
 
-                // Load real pupils that match staged KtakPupilId values
+                // Load real pupils that match staged KtakPupilId values. Deliberately NOT filtered by
+                // RegionId: KtakPupilId is unique, so a pupil who moved to this region is the same
+                // row (the update below sets RegionId), and must not be inserted a second time.
                 var stagedIds = stagingRows.Select(s => s.KtakPupilId).Distinct().ToList();
 
                 var existingPupils = await _context.Pupils
-                    .Where(p => stagedIds.Contains(p.KtakPupilId) && p.RegionId == regionId)
+                    .Where(p => stagedIds.Contains(p.KtakPupilId))
                     .ToListAsync();
 
                 // Pupils has no unique constraint on KtakPupilId, so duplicate rows can exist
@@ -839,6 +1008,25 @@ namespace PordznakanAPI.Controllers
 
                 _logger?.LogInformation($"[Region {regionId}] Pupil MD5 compare done. New={newPupils.Count}, Updated={pupilsUpdated}. Saving...");
 
+                // Guard against mass duplication: a sync that wants to insert a large share of the
+                // pupils we already hold is far more likely a failed existence check than a real
+                // intake, so insert nothing (mirrors MaxPupilDeleteShare for deletions).
+                if (existingDict.Count > 0
+                    && newPupils.Count >= MinNewPupilsForInsertGuard
+                    && newPupils.Count > existingDict.Count * MaxPupilInsertShare)
+                {
+                    _logger?.LogError(
+                        $"[Region {regionId}] {newPupils.Count} new pupils vs {existingDict.Count} existing " +
+                        $"(more than {MaxPupilInsertShare:P0}); nothing inserted or updated, existence check looks broken.");
+
+                    _context.ChangeTracker.Clear();
+                    await _context.PupilsStaging.Where(s => s.RegionId == regionId).ExecuteDeleteAsync();
+
+                    result.Success = false;
+                    result.ErrorMessage = "Too many new pupils compared to existing ones; aborted to avoid mass duplication.";
+                    return result;
+                }
+
                 if (newPupils.Any())
                 {
                     _context.Pupils.AddRange(newPupils);
@@ -849,8 +1037,51 @@ namespace PordznakanAPI.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                // Cleanup staging
-                await _context.PupilsStaging.ExecuteDeleteAsync();
+                // === Step 5: Delete pupils that EMIS no longer returns for this region ===
+                var pupilsDeleted = 0;
+
+                if (regionDataIncomplete)
+                {
+                    _logger?.LogWarning($"[Region {regionId}] A special-case school failed to load; skipping deletion of missing pupils.");
+                }
+                else if (stagedIds.Count == 0)
+                {
+                    _logger?.LogWarning($"[Region {regionId}] EMIS returned no pupils; skipping deletion of missing pupils.");
+                }
+                else
+                {
+                    var stagedIdSet = stagedIds.ToHashSet();
+                    var regionRows = await _context.Pupils.AsNoTracking()
+                        .Where(p => p.RegionId == regionId && p.Place == KtakPlace.School)
+                        .Select(p => new { p.Id, p.KtakPupilId })
+                        .ToListAsync();
+
+                    var staleIds = regionRows
+                        .Where(p => !stagedIdSet.Contains(p.KtakPupilId))
+                        .Select(p => p.Id)
+                        .ToList();
+
+                    if (staleIds.Count > regionRows.Count * MaxPupilDeleteShare)
+                    {
+                        _logger?.LogError(
+                            $"[Region {regionId}] {staleIds.Count} of {regionRows.Count} pupils are missing from EMIS " +
+                            $"(more than {MaxPupilDeleteShare:P0}); nothing deleted, EMIS data looks incomplete.");
+                    }
+                    else
+                    {
+                        foreach (var chunk in staleIds.Chunk(1000))
+                        {
+                            pupilsDeleted += await _context.Pupils
+                                .Where(p => chunk.Contains(p.Id))
+                                .ExecuteDeleteAsync();
+                        }
+
+                        _logger?.LogInformation($"[Region {regionId}] Deleted {pupilsDeleted} pupils that EMIS no longer returns.");
+                    }
+                }
+
+                // Cleanup staging (this region only)
+                await _context.PupilsStaging.Where(s => s.RegionId == regionId).ExecuteDeleteAsync();
 
                 // Set result properties
                 result.Success = true;
@@ -863,6 +1094,7 @@ namespace PordznakanAPI.Controllers
                 result.PupilsProcessed = stagingRows.Count;
                 result.PupilsAdded = newPupils.Count;
                 result.PupilsUpdated = pupilsUpdated;
+                result.PupilsDeleted = pupilsDeleted;
 
                 return result;
             }
@@ -896,7 +1128,8 @@ namespace PordznakanAPI.Controllers
                     classroomsUpdated = result.ClassroomsUpdated,
                     pupilsProcessed = result.PupilsProcessed,
                     pupilsAdded = result.PupilsAdded,
-                    pupilsUpdated = result.PupilsUpdated
+                    pupilsUpdated = result.PupilsUpdated,
+                    pupilsDeleted = result.PupilsDeleted
                 });
             }
             else

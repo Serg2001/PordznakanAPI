@@ -329,11 +329,11 @@ namespace PordznakanAPI.Controllers
                 // Load all staged staff
                 var stagingRows = await _context.NmuhStaffStaging.ToListAsync();
 
-                // Build InstId → NmuhInstitution.Id lookup for InternalSchoolId resolution
+                // Build InstId → MuhInstitution.Id lookup for InternalSchoolId resolution
                 var instIds = stagingRows.Select(s => s.InstId).Distinct().ToList();
-                var schoolLookup = await _context.NmuhInstitutions
-                    .Where(i => instIds.Contains(i.InstId))
-                    .ToDictionaryAsync(i => i.InstId, i => i.Id);
+                var schoolLookup = await _context.MuhInstitutions
+                    .Where(i => instIds.Contains(i.InstitutionId))
+                    .ToDictionaryAsync(i => i.InstitutionId, i => i.Id);
 
                 // Get existing staff by NmuhStaffId
                 var stagedIds = stagingRows.Select(s => s.NmuhStaffId).Distinct().ToList();

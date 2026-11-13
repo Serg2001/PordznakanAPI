@@ -29,6 +29,8 @@ namespace PordznakanAPI.Models
 
         public EPupilStatus Status { get; set; }
 
+        public bool HasBook { get; set; }                        // true if pupil has received their book
+
         public string MD5 { get; set; } = string.Empty;          // hash of important fields
 
         public DateTime CreatedAt { get; set; }

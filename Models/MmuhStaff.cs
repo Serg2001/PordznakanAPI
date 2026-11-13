@@ -5,7 +5,7 @@ namespace PordznakanAPI.Models
         public Guid Id { get; set; }
         public int MmuhStaffId { get; set; }                               // staff_id from external API
         public int InstId { get; set; }                                    // inst_id (institution ID)
-        public Guid? InternalSchoolId { get; set; }                        // FK to MmuhInstitution.Id in our DB
+        public Guid? InternalSchoolId { get; set; }                        // FK to MuhInstitution.Id in our DB
         public int RegionId { get; set; }                                  // Region identifier (1-11)
         public string InstName { get; set; } = string.Empty;              // inst_name (institution name)
         

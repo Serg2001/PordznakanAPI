@@ -36,26 +36,21 @@ SCHOOL EMPLOYEES
   GET /api/RegionData/school-employees/by-region/{regionId}
   GET /api/RegionData/school-employees/{id:guid}
 
-MMUH INSTITUTIONS
-  GET /api/RegionData/mmuh-institutions/by-region/{regionId}
+MUH INSTITUTIONS (MMUH + NMUH)
+  GET /api/RegionData/muh-institutions/by-region/{regionId}
+  GET /api/RegionData/muh-institutions/summary/by-region/{regionId}
 
-MMUH STUDENTS
-  GET /api/RegionData/mmuh-students/by-region/{regionId}
-  GET /api/RegionData/mmuh-students/by-institution/{institutionId}
-  GET /api/RegionData/mmuh-students/{id:guid}
+MUH STUDENTS (MMUH + NMUH)
+  GET /api/RegionData/muh-students/by-region/{regionId}
+  GET /api/RegionData/muh-students/by-institution/{institutionId}
+  GET /api/RegionData/muh-students/summary/by-institution/{institutionId}
+  GET /api/RegionData/muh-students/by-institution/{institutionId}/{socNumber}
+  GET /api/RegionData/muh-students/{id:guid}
 
 MMUH STAFF
   GET /api/RegionData/mmuh-staff/by-region/{regionId}
   GET /api/RegionData/mmuh-staff/by-institution/{institutionId}
   GET /api/RegionData/mmuh-staff/{id:guid}
-
-NMUH INSTITUTIONS
-  GET /api/RegionData/nmuh-institutions/by-region/{regionId}
-
-NMUH STUDENTS
-  GET /api/RegionData/nmuh-students/by-region/{regionId}
-  GET /api/RegionData/nmuh-students/by-institution/{institutionId}
-  GET /api/RegionData/nmuh-students/{id:guid}
 
 NMUH STAFF
   GET /api/RegionData/nmuh-staff/by-region/{regionId}
@@ -63,38 +58,24 @@ NMUH STAFF
   GET /api/RegionData/nmuh-staff/{id:guid}
 
 
-── MmuhInstitution (/api/MmuhInstitution) ──────────────────────────────────────
+── MuhInstitution (/api/MuhInstitution) ────────────────────────────────────────
 
-  GET /api/MmuhInstitution/by-region/{regionId}
-  GET /api/MmuhInstitution/{id:guid}
-  GET /api/MmuhInstitution/sync-changes/latest
-  GET /api/MmuhInstitution/changed-entities/latest
-
-
-── NmuhInstitution (/api/NmuhInstitution) ──────────────────────────────────────
-
-  GET /api/NmuhInstitution/by-region/{regionId}
-  GET /api/NmuhInstitution/{id:guid}
-  GET /api/NmuhInstitution/sync-changes/latest
-  GET /api/NmuhInstitution/changed-entities/latest
+  GET /api/MuhInstitution/by-region/{regionId}
+  GET /api/MuhInstitution/{id:guid}
+  GET /api/MuhInstitution/sync-changes/latest
+  GET /api/MuhInstitution/changed-entities/latest
 
 
-── MmuhStudent (/api/MmuhStudent) ──────────────────────────────────────────────
+── MuhStudent (/api/MuhStudent) ────────────────────────────────────────────────
 
-  GET /api/MmuhStudent/sync-changes/latest
-  GET /api/MmuhStudent/changed-entities/latest
+  GET /api/MuhStudent/sync-changes/latest
+  GET /api/MuhStudent/changed-entities/latest
 
 
 ── MmuhStaff (/api/MmuhStaff) ──────────────────────────────────────────────────
 
   GET /api/MmuhStaff/sync-changes/latest
   GET /api/MmuhStaff/changed-entities/latest
-
-
-── NmuhStudent (/api/NmuhStudent) ──────────────────────────────────────────────
-
-  GET /api/NmuhStudent/sync-changes/latest
-  GET /api/NmuhStudent/changed-entities/latest
 
 
 ── NmuhStaff (/api/NmuhStaff) ──────────────────────────────────────────────────

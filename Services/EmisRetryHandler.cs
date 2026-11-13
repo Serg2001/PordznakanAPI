@@ -24,6 +24,7 @@ namespace PordznakanAPI.Services
     /// waiting, so a failed call is usually worth repeating a minute later instead of
     /// losing the region for the whole night.
     ///
+    /// Only GET/HEAD requests are retried; POSTs pass straight through.
     /// Only 5xx, 408, 429 and transport failures are retried — 401 (bad token) and 404 are
     /// permanent and fail immediately rather than wasting the whole retry budget.
     ///
@@ -49,6 +50,11 @@ namespace PordznakanAPI.Services
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            // Only reads are retried. A POST (save_book_checking) that timed out may still have
+            // reached EMIS, so repeating it would store the same HasBook twice.
+            if (request.Method != HttpMethod.Get && request.Method != HttpMethod.Head)
+                return await base.SendAsync(request, cancellationToken);
+
             for (var attempt = 0; ; attempt++)
             {
                 // Give every attempt its own budget, so one stalled call cannot consume

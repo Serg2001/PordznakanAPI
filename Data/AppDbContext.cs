@@ -21,12 +21,10 @@ namespace PordznakanAPI.Data
         public DbSet<Teacher> Teachers { get; set; }
         public DbSet<TeacherStaging> TeachersStaging { get; set; }
         public DbSet<TeacherSubject> TeacherSubjects { get; set; }
-        public DbSet<MmuhStudent> MmuhStudents { get; set; }
-        public DbSet<MmuhStudentStaging> MmuhStudentsStaging { get; set; }
+        public DbSet<MuhStudent> MuhStudents { get; set; }
+        public DbSet<MuhStudentStaging> MuhStudentsStaging { get; set; }
         public DbSet<MmuhStaff> MmuhStaff { get; set; }
         public DbSet<MmuhStaffStaging> MmuhStaffStaging { get; set; }
-        public DbSet<NmuhStudent> NmuhStudents { get; set; }
-        public DbSet<NmuhStudentStaging> NmuhStudentsStaging { get; set; }
         public DbSet<NmuhStaff> NmuhStaff { get; set; }
         public DbSet<NmuhStaffStaging> NmuhStaffStaging { get; set; }
         public DbSet<NmuhStaffGroup> NmuhStaffGroups { get; set; }
@@ -34,10 +32,8 @@ namespace PordznakanAPI.Data
         public DbSet<MmuhStaffGroup> MmuhStaffGroups { get; set; }
         public DbSet<MmuhSubject> MmuhSubjects { get; set; }
         public DbSet<SchoolEmployee> SchoolEmployees { get; set; }
-        public DbSet<MmuhInstitution> MmuhInstitutions { get; set; }
-        public DbSet<MmuhInstitutionStaging> MmuhInstitutionsStaging { get; set; }
-        public DbSet<NmuhInstitution> NmuhInstitutions { get; set; }
-        public DbSet<NmuhInstitutionStaging> NmuhInstitutionsStaging { get; set; }
+        public DbSet<MuhInstitution> MuhInstitutions { get; set; }
+        public DbSet<MuhInstitutionStaging> MuhInstitutionsStaging { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -76,7 +72,8 @@ namespace PordznakanAPI.Data
                 //.IsUnique();  // Composite index for external API identification
 
             modelBuilder.Entity<Pupil>()
-                .HasIndex(p => p.KtakPupilId);  // Index for querying by external pupil ID
+                .HasIndex(p => p.KtakPupilId)   // Index for querying by external pupil ID
+                .IsUnique();                    // One row per EMIS pupil; apply only after duplicates are cleaned up
 
             modelBuilder.Entity<Pupil>()
                 .HasOne(p => p.Classroom)
@@ -116,21 +113,29 @@ namespace PordznakanAPI.Data
                 .HasForeignKey(ts => ts.TeacherId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Configure MmuhStudent entity
-            modelBuilder.Entity<MmuhStudent>()
+            // Configure MuhStudent entity
+            modelBuilder.Entity<MuhStudent>()
                 .HasKey(m => m.Id);
 
-            modelBuilder.Entity<MmuhStudent>()
-                .HasIndex(m => m.MmuhStudentId);
+            modelBuilder.Entity<MuhStudent>()
+                .HasIndex(m => m.MuhStudentId);
 
-            modelBuilder.Entity<MmuhStudent>()
-                .HasIndex(m => m.MmuhSchoolId);
+            modelBuilder.Entity<MuhStudent>()
+                .HasIndex(m => m.InstitutionId);
 
-            // Configure MmuhStudent staging entity (same schema, different table)
-            modelBuilder.Entity<MmuhStudentStaging>()
-                .ToTable("MmuhStudentsStaging");
+            modelBuilder.Entity<MuhStudent>()
+                .Property(m => m.AnnualFee)
+                .HasPrecision(18, 2);
 
-            modelBuilder.Entity<MmuhStudentStaging>()
+            modelBuilder.Entity<MuhStudentStaging>()
+                .Property(m => m.AnnualFee)
+                .HasPrecision(18, 2);
+
+            // Configure MuhStudent staging entity (same schema, different table)
+            modelBuilder.Entity<MuhStudentStaging>()
+                .ToTable("MuhStudentsStaging");
+
+            modelBuilder.Entity<MuhStudentStaging>()
                 .HasKey(m => m.Id);
 
             // Configure MmuhStaff entity
@@ -186,23 +191,6 @@ namespace PordznakanAPI.Data
                 .ToTable("MmuhStaffStaging");
 
             modelBuilder.Entity<MmuhStaffStaging>()
-                .HasKey(m => m.Id);
-
-            // Configure NmuhStudent entity
-            modelBuilder.Entity<NmuhStudent>()
-                .HasKey(m => m.Id);
-
-            modelBuilder.Entity<NmuhStudent>()
-                .HasIndex(m => m.NmuhStudentId);
-
-            modelBuilder.Entity<NmuhStudent>()
-                .HasIndex(m => m.NmuhSchoolId);
-
-            // Configure NmuhStudent staging entity (same schema, different table)
-            modelBuilder.Entity<NmuhStudentStaging>()
-                .ToTable("NmuhStudentsStaging");
-
-            modelBuilder.Entity<NmuhStudentStaging>()
                 .HasKey(m => m.Id);
 
             // Configure NmuhStaff entity
@@ -273,40 +261,22 @@ namespace PordznakanAPI.Data
             modelBuilder.Entity<SchoolEmployee>()
                 .HasIndex(e => e.RegionId);
 
-            // Configure MmuhInstitution entity
-            modelBuilder.Entity<MmuhInstitution>()
+            // Configure MuhInstitution entity
+            modelBuilder.Entity<MuhInstitution>()
                 .HasKey(m => m.Id);
 
-            modelBuilder.Entity<MmuhInstitution>()
-                .HasIndex(m => m.InstId);
+            modelBuilder.Entity<MuhInstitution>()
+                .HasIndex(m => m.InstitutionId);
 
-            modelBuilder.Entity<MmuhInstitution>()
+            modelBuilder.Entity<MuhInstitution>()
                 .HasIndex(m => m.RegionId);
 
-            // Configure MmuhInstitution staging entity (same schema, different table)
-            modelBuilder.Entity<MmuhInstitutionStaging>()
-                .ToTable("MmuhInstitutionsStaging");
+            // Configure MuhInstitution staging entity (same schema, different table)
+            modelBuilder.Entity<MuhInstitutionStaging>()
+                .ToTable("MuhInstitutionsStaging");
 
-            modelBuilder.Entity<MmuhInstitutionStaging>()
+            modelBuilder.Entity<MuhInstitutionStaging>()
                 .HasKey(m => m.Id);
-
-            // Configure NmuhInstitution entity
-            modelBuilder.Entity<NmuhInstitution>()
-                .HasKey(m => m.Id);
-
-            modelBuilder.Entity<NmuhInstitution>()
-                .HasIndex(m => m.InstId);
-
-            modelBuilder.Entity<NmuhInstitution>()
-                .HasIndex(m => m.RegionId);
-
-            // Configure NmuhInstitution staging entity (same schema, different table)
-            modelBuilder.Entity<NmuhInstitutionStaging>()
-                .ToTable("NmuhInstitutionsStaging");
-
-            modelBuilder.Entity<NmuhInstitutionStaging>()
-                .HasKey(m => m.Id);
-
         }
     }
 }
