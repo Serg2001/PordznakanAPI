@@ -124,6 +124,13 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
+            using var guard = SyncGuard.TryAcquire(nameof(SchoolEmployeeController));
+            if (guard is null)
+            {
+                _logger?.LogWarning("[SchoolEmployee] Sync is already running; this run was skipped.");
+                return;
+            }
+
             foreach (var regionId in Enumerable.Range(1, 11))
             {
                 try
@@ -145,39 +152,17 @@ namespace PordznakanAPI.Controllers
             // data-api.emis.am/v1/get_personnel_list/{regionId} — same host, token and
             // client as SchoolController's getAllData sync (see Program.cs / appsettings.json).
             var client = _httpClientFactory.CreateClient(EmisClients.GetAllData);
-            var response = await client.GetAsync($"get_personnel_list/{regionId}");
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorBody = await response.Content.ReadAsStringAsync();
-                throw new HttpRequestException(
-                    $"[SchoolEmployee] get_personnel_list/{regionId} returned {(int)response.StatusCode} {response.StatusCode}. Body: {errorBody}");
-            }
 
-            var responseText = await response.Content.ReadAsStringAsync();
-            var token = JToken.Parse(responseText);
+            // EMIS paginates get_personnel_list/{regionId}?page=N; read every page.
+            var pages = await EmisPaging.FetchAllItemsAsync(
+                client, $"get_personnel_list/{regionId}", _logger, $"[SchoolEmployee][Region {regionId}]");
+            var array = pages.Items;
 
-            JArray? array = token as JArray;
-            if (array == null && token is JObject obj)
-            {
-                array = obj["data"] as JArray
-                     ?? obj["results"] as JArray
-                     ?? obj["items"] as JArray;
-
-                if (array == null)
-                {
-                    foreach (var prop in obj.Properties())
-                    {
-                        if (prop.Value.Type == JTokenType.Array)
-                        {
-                            array = (JArray)prop.Value;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (array == null)
-                throw new Exception($"[SchoolEmployee] Cannot parse array from API response for region {regionId}.");
+            // The region's rows are deleted below, so never do that on a partial download.
+            if (!pages.Complete)
+                throw new InvalidOperationException(
+                    $"[SchoolEmployee] Region {regionId}: received {array.Count} of {pages.Total} personnel; " +
+                    "existing rows were kept.");
 
             var now = DateTime.UtcNow;
 
@@ -210,6 +195,10 @@ namespace PordznakanAPI.Controllers
         [HttpPost("sync/{regionId:int}")]
         public async Task<IActionResult> Sync([FromRoute] int regionId)
         {
+            using var guard = SyncGuard.TryAcquire(nameof(SchoolEmployeeController));
+            if (guard is null)
+                return Conflict(new { error = "School employee sync is already running. Try again when it finishes.", regionId });
+
             try
             {
                 var (added, updated) = await SyncRegionInternal(regionId);

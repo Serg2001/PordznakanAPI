@@ -485,7 +485,8 @@ namespace PordznakanAPI.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("InstitutionId");
+                    b.HasIndex("InstitutionId")
+                        .IsUnique();
 
                     b.HasIndex("RegionId");
 
@@ -698,7 +699,8 @@ namespace PordznakanAPI.Migrations
 
                     b.HasIndex("InstitutionId");
 
-                    b.HasIndex("MuhStudentId");
+                    b.HasIndex("MuhStudentId")
+                        .IsUnique();
 
                     b.ToTable("MuhStudents");
                 });
@@ -1400,6 +1402,9 @@ namespace PordznakanAPI.Migrations
                     b.HasIndex("RegionId");
 
                     b.HasIndex("SchoolId");
+
+                    b.HasIndex("RegionId", "PersonId", "VacationId")
+                        .IsUnique();
 
                     b.ToTable("SchoolEmployees");
                 });

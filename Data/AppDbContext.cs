@@ -118,7 +118,8 @@ namespace PordznakanAPI.Data
                 .HasKey(m => m.Id);
 
             modelBuilder.Entity<MuhStudent>()
-                .HasIndex(m => m.MuhStudentId);
+                .HasIndex(m => m.MuhStudentId)
+                .IsUnique();  // One row per EMIS college student (the sync keeps each id once)
 
             modelBuilder.Entity<MuhStudent>()
                 .HasIndex(m => m.InstitutionId);
@@ -255,6 +256,14 @@ namespace PordznakanAPI.Data
             modelBuilder.Entity<SchoolEmployee>()
                 .HasIndex(e => e.PersonId);
 
+            // Mirrors the sync, which replaces a whole region and keeps one row per (PersonId, VacationId).
+            // HasFilter(null): VacationId is NULL for people without a position, and those rows must
+            // count as equal too (EF would otherwise exclude them from the index).
+            modelBuilder.Entity<SchoolEmployee>()
+                .HasIndex(e => new { e.RegionId, e.PersonId, e.VacationId })
+                .IsUnique()
+                .HasFilter(null);
+
             modelBuilder.Entity<SchoolEmployee>()
                 .HasIndex(e => e.SchoolId);
 
@@ -266,7 +275,8 @@ namespace PordznakanAPI.Data
                 .HasKey(m => m.Id);
 
             modelBuilder.Entity<MuhInstitution>()
-                .HasIndex(m => m.InstitutionId);
+                .HasIndex(m => m.InstitutionId)
+                .IsUnique();  // One row per EMIS institution (the sync keeps each id once)
 
             modelBuilder.Entity<MuhInstitution>()
                 .HasIndex(m => m.RegionId);

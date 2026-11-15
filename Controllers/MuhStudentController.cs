@@ -93,6 +93,13 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
+            using var guard = SyncGuard.TryAcquire(nameof(MuhStudentController));
+            if (guard is null)
+            {
+                _logger?.LogWarning("MuhStudent sync is already running; this run was skipped.");
+                return;
+            }
+
             // Regions plus the manually maintained (regionId, subId) links shared with MuhInstitutionController.
             var targets = Enumerable.Range(1, 11)
                 .Select(r => (RegionId: r, SubId: (int?)null))
@@ -160,13 +167,10 @@ namespace PordznakanAPI.Controllers
         /// (which the API may send as [] instead of {}) are skipped. A student that shows
         /// up more than once is kept once (first occurrence).
         /// </summary>
-        private static List<MuhStudentStaging> ParseStudents(string json, int regionId, DateTime now)
+        private static List<MuhStudentStaging> ParseStudents(JObject institutions, int regionId, DateTime now)
         {
             var rows = new List<MuhStudentStaging>();
             var seen = new HashSet<int>();
-
-            if (JToken.Parse(json) is not JObject institutions)
-                return rows;
 
             foreach (var institutionProp in institutions.Properties())
             {
@@ -365,10 +369,17 @@ namespace PordznakanAPI.Controllers
                     : subId.HasValue
                         ? $"colleges/getAllData/{regionId}/{subId}"
                         : $"colleges/getAllData/{regionId}";
-                var responseText = await client.GetStringAsync(path);
+
+                // EMIS paginates colleges/getAllData/...?page=N; read every page and merge the institutions.
+                var pages = await EmisPaging.FetchAllPagesAsync(client, path, _logger, $"[MuhStudent][Region {regionId}]");
+                if (!pages.Complete)
+                {
+                    _logger?.LogWarning(
+                        $"[MuhStudent][Region {regionId}] Received {pages.Data.Count} institutions but EMIS reports total={pages.Total}.");
+                }
 
                 var now = DateTime.UtcNow;
-                var parsed = ParseStudents(responseText, regionId, now);
+                var parsed = ParseStudents(pages.Data, regionId, now);
 
                 // Clear staging table for this sync
                 await _context.MuhStudentsStaging.ExecuteDeleteAsync();
@@ -536,6 +547,10 @@ namespace PordznakanAPI.Controllers
         [HttpPost("sync/{regionId?}")]
         public async Task<IActionResult> SyncStudents([FromRoute] int regionId = 1)
         {
+            using var guard = SyncGuard.TryAcquire(nameof(MuhStudentController));
+            if (guard is null)
+                return Conflict(new { error = "MuhStudent sync is already running. Try again when it finishes." });
+
             var result = await SyncRegionInternal(regionId);
 
             if (result.Success)

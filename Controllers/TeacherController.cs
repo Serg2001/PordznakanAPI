@@ -32,11 +32,13 @@ namespace PordznakanAPI.Controllers
     public class TeacherController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<TeacherController>? _logger;
 
-        public TeacherController(AppDbContext context, ILogger<TeacherController>? logger = null)
+        public TeacherController(AppDbContext context, IHttpClientFactory httpClientFactory, ILogger<TeacherController>? logger = null)
         {
             _context = context;
+            _httpClientFactory = httpClientFactory;
             _logger = logger;
         }
 
@@ -230,6 +232,13 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
+            using var guard = SyncGuard.TryAcquire(nameof(TeacherController));
+            if (guard is null)
+            {
+                _logger?.LogWarning("Teacher sync is already running; this run was skipped.");
+                return;
+            }
+
             var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
             var results = new List<TeacherSyncResult>();
             var syncStartTime = DateTime.UtcNow;
@@ -302,96 +311,19 @@ namespace PordznakanAPI.Controllers
 
             try
             {
-                using var client = new HttpClient();
-                var url = $"https://api.emis.am/V1/get_personnel/{regionId}";
-                _logger?.LogInformation($"[Region {regionId}] Fetching teachers from: {url}");
-                
-                var responseText = await client.GetStringAsync(url);
-                _logger?.LogDebug($"[Region {regionId}] API response length: {responseText?.Length ?? 0} characters");
-                
-                // Parse the response - it might be an array or an object containing an array
-                JArray? teachersArray = null;
-                JToken token;
-                
-                try
+                // Shared EMIS client (data-api.emis.am/v1/): X-Api-Token, retries, long timeout.
+                // EMIS paginates get_personnel/{regionId}?page=N; read every page.
+                var client = _httpClientFactory.CreateClient(EmisClients.GetAllData);
+                var path = $"get_personnel/{regionId}";
+                _logger?.LogInformation($"[Region {regionId}] Fetching teachers from: {path}");
+
+                var pages = await EmisPaging.FetchAllItemsAsync(client, path, _logger, $"[Teacher][Region {regionId}]");
+                var teachersArray = pages.Items;
+
+                if (!pages.Complete)
                 {
-                    token = JToken.Parse(responseText);
-                }
-                catch (Exception parseEx)
-                {
-                    var preview = responseText?.Length > 500 ? responseText.Substring(0, 500) : responseText;
-                    throw new Exception($"Failed to parse JSON response. Response preview: {preview}. Error: {parseEx.Message}", parseEx);
-                }
-                
-                if (token.Type == JTokenType.Array)
-                {
-                    // Response is directly an array
-                    teachersArray = token as JArray;
-                    _logger?.LogInformation($"[Region {regionId}] Response is a direct array with {teachersArray?.Count ?? 0} items");
-                }
-                else if (token.Type == JTokenType.Object)
-                {
-                    // Response is an object - try to find an array property
-                    var obj = token as JObject;
-                    if (obj != null)
-                    {
-                        _logger?.LogInformation($"[Region {regionId}] Response is an object. Properties: {string.Join(", ", obj.Properties().Select(p => p.Name))}");
-                        
-                        // Try common property names that might contain the array
-                        teachersArray = obj["data"] as JArray 
-                                     ?? obj["teachers"] as JArray 
-                                     ?? obj["results"] as JArray 
-                                     ?? obj["items"] as JArray;
-                        
-                        if (teachersArray == null)
-                        {
-                            // Check if there's an error message
-                            var errorMessage = obj["error"]?.ToString() 
-                                            ?? obj["message"]?.ToString()
-                                            ?? obj["ErrorMessage"]?.ToString();
-                            
-                            if (!string.IsNullOrWhiteSpace(errorMessage))
-                            {
-                                throw new Exception($"API returned an error: {errorMessage}");
-                            }
-                            
-                            // Try to find any array property
-                            foreach (var prop in obj.Properties())
-                            {
-                                if (prop.Value.Type == JTokenType.Array)
-                                {
-                                    teachersArray = prop.Value as JArray;
-                                    _logger?.LogWarning($"[Region {regionId}] Found teachers array in property '{prop.Name}' with {teachersArray.Count} items");
-                                    break;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            _logger?.LogInformation($"[Region {regionId}] Found teachers array in common property with {teachersArray.Count} items");
-                        }
-                    }
-                }
-                
-                if (teachersArray == null)
-                {
-                    // Last attempt: check if the response is a single teacher object
-                    if (token.Type == JTokenType.Object)
-                    {
-                        var obj = token as JObject;
-                        if (obj != null && obj["person_id"] != null)
-                        {
-                            // It's a single teacher object - wrap it in an array
-                            teachersArray = new JArray { obj };
-                            _logger?.LogInformation($"[Region {regionId}] Response is a single teacher object, wrapping in array");
-                        }
-                    }
-                    
-                    if (teachersArray == null)
-                    {
-                        var preview = responseText?.Length > 1000 ? responseText.Substring(0, 1000) : responseText;
-                        throw new Exception($"Unable to parse teachers array from API response. Response type: {token.Type}. Response preview: {preview}");
-                    }
+                    _logger?.LogWarning(
+                        $"[Region {regionId}] Received {teachersArray.Count} teachers but EMIS reports total={pages.Total}.");
                 }
                 
                 _logger?.LogInformation($"[Region {regionId}] Successfully parsed {teachersArray.Count} teachers from API response");
@@ -418,6 +350,7 @@ namespace PordznakanAPI.Controllers
 
                 var now = DateTime.UtcNow;
                 var teachersJsonData = new Dictionary<int, JObject>(); // Store JSON for subjects processing later
+                var seenTeacherIds = new HashSet<int>();
 
                 // Process all teachers from API into staging
                 foreach (var teacherToken in teachersArray)
@@ -431,6 +364,11 @@ namespace PordznakanAPI.Controllers
 
                     var schoolIdStr = teacherObj["school_id"]?.ToString();
                     if (string.IsNullOrWhiteSpace(schoolIdStr) || !int.TryParse(schoolIdStr, out var ktakSchoolId))
+                        continue;
+
+                    // A person can arrive twice (EMIS data shifting between pages); keeping both would
+                    // insert the same KtakTeacherId twice and hit the unique index.
+                    if (!seenTeacherIds.Add(ktakTeacherId))
                         continue;
 
                     // Store JSON data for later subject processing
@@ -989,6 +927,10 @@ namespace PordznakanAPI.Controllers
         [HttpPost("sync/{regionId?}")]
         public async Task<IActionResult> SyncTeachers([FromRoute] int regionId)
         {
+            using var guard = SyncGuard.TryAcquire(nameof(TeacherController));
+            if (guard is null)
+                return Conflict(new { error = "Teacher sync is already running. Try again when it finishes." });
+
             var result = await SyncRegionInternal(regionId);
 
             if (result.Success)

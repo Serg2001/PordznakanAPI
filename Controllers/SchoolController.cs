@@ -369,6 +369,13 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
+            using var guard = SyncGuard.TryAcquire(nameof(PupilController));
+            if (guard is null)
+            {
+                _logger?.LogWarning("Pupil sync is already running; this run was skipped.");
+                return;
+            }
+
             var regionIds = new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
             var results = new List<SyncResult>();
             var syncStartTime = DateTime.UtcNow;
@@ -1112,6 +1119,10 @@ namespace PordznakanAPI.Controllers
         [HttpPost("sync/{regionId?}")]
         public async Task<IActionResult> Sync([FromRoute] int regionId = 1)
         {
+            using var guard = SyncGuard.TryAcquire(nameof(PupilController));
+            if (guard is null)
+                return Conflict(new { error = "Pupil sync is already running. Try again when it finishes." });
+
             var result = await SyncRegionInternal(regionId);
             
             if (result.Success)

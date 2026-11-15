@@ -90,6 +90,13 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
+            using var guard = SyncGuard.TryAcquire(nameof(MuhInstitutionController));
+            if (guard is null)
+            {
+                _logger?.LogWarning("MuhInstitution sync is already running; this run was skipped.");
+                return;
+            }
+
             var targets = Enumerable.Range(1, 11)
                 .Select(r => (RegionId: r, SubId: (int?)null))
                 .Concat(ExtraGeographyLinks.Select(l => (l.RegionId, SubId: (int?)l.SubId)))
@@ -152,12 +159,9 @@ namespace PordznakanAPI.Controllers
         /// ("1458": { "institution_id": 1458, "name": ..., ... }). The key is used when the
         /// inner institution_id is missing. An empty region may come back as [] or {}.
         /// </summary>
-        private static List<MuhInstitutionStaging> ParseInstitutions(string json, int regionId, DateTime now)
+        private static List<MuhInstitutionStaging> ParseInstitutions(JObject dict, int regionId, DateTime now)
         {
             var rows = new List<MuhInstitutionStaging>();
-
-            if (JToken.Parse(json) is not JObject dict)
-                return rows;
 
             foreach (var property in dict.Properties())
             {
@@ -226,10 +230,17 @@ namespace PordznakanAPI.Controllers
                 var path = subId.HasValue
                     ? $"colleges/getCollegesGeography/{regionId}/{subId}"
                     : $"colleges/getCollegesGeography/{regionId}";
-                var responseText = await client.GetStringAsync(path);
+
+                // EMIS paginates colleges/getCollegesGeography/...?page=N; read every page and merge the institutions.
+                var pages = await EmisPaging.FetchAllPagesAsync(client, path, _logger, $"[MuhInstitution][Region {regionId}]");
+                if (!pages.Complete)
+                {
+                    _logger?.LogWarning(
+                        $"[MuhInstitution][Region {regionId}] Received {pages.Data.Count} institutions but EMIS reports total={pages.Total}.");
+                }
 
                 var now = DateTime.UtcNow;
-                var parsed = ParseInstitutions(responseText, regionId, now);
+                var parsed = ParseInstitutions(pages.Data, regionId, now);
 
                 // Clear staging table for this sync
                 await _context.MuhInstitutionsStaging.ExecuteDeleteAsync();
@@ -335,6 +346,10 @@ namespace PordznakanAPI.Controllers
         [HttpPost("sync/{regionId?}")]
         public async Task<IActionResult> SyncInstitutions([FromRoute] int regionId = 1)
         {
+            using var guard = SyncGuard.TryAcquire(nameof(MuhInstitutionController));
+            if (guard is null)
+                return Conflict(new { error = "MuhInstitution sync is already running. Try again when it finishes." });
+
             var result = await SyncRegionInternal(regionId);
 
             if (result.Success)

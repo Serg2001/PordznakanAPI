@@ -154,6 +154,13 @@ namespace PordznakanAPI.Controllers
         [NonAction]
         public async Task SyncAllRegions()
         {
+            using var guard = SyncGuard.TryAcquire(nameof(MmuhStaffController));
+            if (guard is null)
+            {
+                _logger?.LogWarning("MmuhStaff sync is already running; this run was skipped.");
+                return;
+            }
+
             var regionIds = Enumerable.Range(1, 11).ToArray();
             var results = new List<MmuhStaffSyncResult>();
 
@@ -504,6 +511,10 @@ namespace PordznakanAPI.Controllers
         [HttpPost("sync/{regionId?}")]
         public async Task<IActionResult> SyncStaff([FromRoute] int regionId = 1)
         {
+            using var guard = SyncGuard.TryAcquire(nameof(MmuhStaffController));
+            if (guard is null)
+                return Conflict(new { error = "MmuhStaff sync is already running. Try again when it finishes." });
+
             var result = await SyncRegionInternal(regionId);
 
             if (result.Success)
