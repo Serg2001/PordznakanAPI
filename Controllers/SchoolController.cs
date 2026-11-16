@@ -192,8 +192,8 @@ namespace PordznakanAPI.Controllers
             if (string.IsNullOrWhiteSpace(classifier))
                 return ESubGrade.Unknown;
 
-            // normalize Armenian letters
-            return classifier.Trim() switch
+            // normalize Armenian letters: EMIS may send them in upper case ("Ռ"), the cases below are lower case
+            return classifier.Trim().ToLowerInvariant() switch
             {
                 "ա" => ESubGrade.Sg1,
                 "բ" => ESubGrade.Sg2,
@@ -515,6 +515,16 @@ namespace PordznakanAPI.Controllers
                     $"{json.Count} school(s)" +
                     (regionPages.Total is null ? "" : $" of {regionPages.Total}") +
                     $" in {(DateTime.UtcNow - fetchStarted).TotalSeconds:0.0}s.");
+
+                // An answer without a single school for a region we already hold schools for means
+                // EMIS changed its format or is broken, not that the region is empty. Fail loudly
+                // instead of reporting a "successful" sync that did nothing.
+                if (json.Count == 0 && await _context.Schools.AnyAsync(s => s.RegionId == regionId))
+                {
+                    result.ErrorMessage = "EMIS returned no schools for this region, although schools are already stored. " +
+                                          "Check the EMIS response format/token; nothing was synced.";
+                    return result;
+                }
 
                 if (!regionPages.Complete)
                 {

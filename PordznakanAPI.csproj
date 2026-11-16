@@ -8,6 +8,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The test project lives in a sub-folder; keep its sources out of the web project. -->
+    <Compile Remove="PordznakanAPI.Tests\**" />
+    <Content Remove="PordznakanAPI.Tests\**" />
+    <EmbeddedResource Remove="PordznakanAPI.Tests\**" />
+    <None Remove="PordznakanAPI.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.22" />
     <PackageReference Include="Hangfire.SqlServer" Version="1.8.22" />

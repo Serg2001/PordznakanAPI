@@ -107,6 +107,7 @@ builder.Services.AddLogging(logging =>
 builder.Services.AddTransient<EmisRetryHandler>();
 builder.Services.AddScoped<ILogTransferService, LogTransferService>();
 builder.Services.AddScoped<ISyncReportService, SyncReportService>();
+builder.Services.AddScoped<IClassRosterService, ClassRosterService>();
 
 var app = builder.Build();
 

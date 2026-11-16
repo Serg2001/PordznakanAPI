@@ -202,7 +202,8 @@ namespace PordznakanAPI.Controllers
             if (string.IsNullOrWhiteSpace(classifier))
                 return ESubGrade.Unknown;
 
-            return classifier.Trim() switch
+            // EMIS may send the letter in upper case ("Ռ"); the cases below are lower case
+            return classifier.Trim().ToLowerInvariant() switch
             {
                 "ա" => ESubGrade.Sg1,
                 "բ" => ESubGrade.Sg2,

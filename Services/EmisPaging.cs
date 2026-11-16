@@ -103,14 +103,20 @@ namespace PordznakanAPI.Services
 
                 pagesFetched++;
 
-                lastPage ??= ReadInt(pageJson, "last_page");
-                total = ReadInt(pageJson, "total") ?? total;
-                perPage = ReadInt(pageJson, "per_page") ?? perPage;
+                // EMIS now wraps the schools: { "data": { "<schoolKey>": {...}, ... }, <paging numbers> }.
+                // The older shape had the school keys at the top level. Accept both. The paging
+                // numbers may sit at the top level or inside a "meta" object.
+                var schoolsNode = pageJson["data"] is JObject dataObj ? dataObj : pageJson;
+                var metaObj = pageJson["meta"] as JObject;
+
+                lastPage ??= ReadMeta(pageJson, metaObj, "last_page");
+                total = ReadMeta(pageJson, metaObj, "total") ?? total;
+                perPage = ReadMeta(pageJson, metaObj, "per_page") ?? perPage;
 
                 if (lastPage is null && total is > 0 && perPage is > 0)
                     lastPage = (int)Math.Ceiling(total.Value / (double)perPage.Value);
 
-                var returnedPage = ReadInt(pageJson, "page");
+                var returnedPage = ReadMeta(pageJson, metaObj, "page");
                 if (returnedPage is not null && returnedPage != page)
                 {
                     logger?.LogWarning(
@@ -118,7 +124,7 @@ namespace PordznakanAPI.Services
                 }
 
                 var added = 0;
-                foreach (var prop in pageJson.Properties())
+                foreach (var prop in schoolsNode.Properties())
                 {
                     // Only school objects are data; page/per_page/total/last_page are metadata.
                     if (MetaKeys.Contains(prop.Name) || prop.Value.Type != JTokenType.Object)
@@ -136,6 +142,14 @@ namespace PordznakanAPI.Services
                 logger?.LogInformation(
                     $"{logPrefix} EMIS page {page}/{lastPage?.ToString() ?? "?"}: {added} schools " +
                     $"({merged.Count}{(total is null ? "" : $" of {total}")} so far).");
+
+                if (added == 0 && page == 1)
+                {
+                    // Make a silently empty answer visible: show which top-level keys EMIS sent.
+                    var keys = string.Join(", ", pageJson.Properties().Select(p => $"{p.Name}:{p.Value.Type}").Take(15));
+                    logger?.LogWarning(
+                        $"{logPrefix} EMIS page 1 contained no school objects. Top-level keys: [{keys}].");
+                }
 
                 // Not paginated, or this was the last page.
                 if (lastPage is null || page >= lastPage.Value)
@@ -284,6 +298,9 @@ namespace PordznakanAPI.Services
                 PerPage = perPage
             };
         }
+
+        private static int? ReadMeta(JObject json, JObject? meta, string name) =>
+            ReadInt(json, name) ?? (meta is null ? null : ReadInt(meta, name));
 
         private static int? ReadInt(JObject json, string name)
         {

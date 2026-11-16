@@ -100,7 +100,7 @@ namespace PordznakanAPI.Enums
         /// <summary>
         /// Ռ
         /// </summary>
-        [Display(Name = "ռ")]
+        [Display(Name = "Ռ")]
         Sg18,
         /// <summary>
         /// 
